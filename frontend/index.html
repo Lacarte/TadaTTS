@@ -2623,6 +2623,17 @@
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || `HTTP ${res.status}`); }
       return res.json();
     }
+    async function checkServerHealth(maxWaitMs = 30000) {
+      const start = Date.now();
+      let delay = 1000;
+      while (Date.now() - start < maxWaitMs) {
+        try { await api('/api/health'); return true; } catch (_) {
+          await new Promise(r => setTimeout(r, delay));
+          delay = Math.min(delay * 1.5, 5000);
+        }
+      }
+      return false;
+    }
 
     // ======================================================================
     // Init
@@ -3342,26 +3353,41 @@
         if (STATE.ffmpeg && STATE.nowPlaying && STATE.nowPlaying._cleanedFilename) { setStepActive(5); await autoConvertMp3(STATE.nowPlaying._cleanedFilename); STATE.nowPlaying._cleanedMp3 = true; updateCleanedMp3Btn(); }
         // Alignment runs in background on the backend — no need to block the UI
         STATE.generateAbort = null;
-        setStepDone(); pollVersionStatuses(result.filename); await loadHistory();
+        setStepDone(); pollVersionStatuses(result.filename, true); await loadHistory();
       } catch (e) { if (e.name === 'AbortError') { hideStepper(); setGenerating(false); return; } toast(e.message || 'Generation failed', 'error'); hideStepper(); setGenerating(false); }
     }
 
     function pollUntilDone(url, doneStatus, pendingStatus, interval, onProgress, abortSignal) {
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve) => {
         let attempts = 0;
-        const maxAttempts = 200; // ~5 min at 1.5s interval
+        let consecutiveErrors = 0;
+        const maxAttempts = 200;
+        const MAX_CONSECUTIVE_ERRORS = 5;
         async function check() {
           if (abortSignal && abortSignal.aborted) { resolve({ status: 'aborted' }); return; }
           if (++attempts > maxAttempts) { console.warn('[pollUntilDone] max attempts reached for', url); resolve({ status: 'timeout' }); return; }
           try {
             const data = await api(url);
+            consecutiveErrors = 0;
             if (data.status === doneStatus) {
               if (data.enhanced_filename && STATE.nowPlaying) STATE.nowPlaying._enhancedFilename = data.enhanced_filename;
               if (data.cleaned_filename && STATE.nowPlaying) STATE.nowPlaying._cleanedFilename = data.cleaned_filename;
               resolve(data);
             } else if (data.status === 'unavailable' || data.status === 'failed') { resolve(data); }
             else { if (onProgress) onProgress(data); setTimeout(check, interval); }
-          } catch (e) { if (abortSignal && abortSignal.aborted) { resolve({ status: 'aborted' }); } else { reject(e); } }
+          } catch (e) {
+            if (abortSignal && abortSignal.aborted) { resolve({ status: 'aborted' }); return; }
+            consecutiveErrors++;
+            console.warn(`[pollUntilDone] error #${consecutiveErrors} for ${url}:`, e.message);
+            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+              console.warn('[pollUntilDone] server appears down, waiting for health...');
+              const healthy = await checkServerHealth(30000);
+              if (!healthy || (abortSignal && abortSignal.aborted)) { resolve({ status: abortSignal?.aborted ? 'aborted' : 'timeout' }); return; }
+              consecutiveErrors = 0;
+            }
+            const backoffDelay = Math.min(interval * Math.pow(1.5, consecutiveErrors), 10000);
+            setTimeout(check, backoffDelay);
+          }
         }
         check();
       });
@@ -3420,9 +3446,9 @@
       const np = $('#now-playing'); np.classList.remove('visible'); $('#player-spacer').style.display = 'none';
       setTimeout(() => { np.style.display = 'none'; }, 400);
       audioEl.pause(); audioEl.src = '';
-      if (STATE.alignmentPollTimer) { clearInterval(STATE.alignmentPollTimer); STATE.alignmentPollTimer = null; }
-      if (STATE.enhancePollTimer) { clearInterval(STATE.enhancePollTimer); STATE.enhancePollTimer = null; }
-      if (STATE.vadPollTimer) { clearInterval(STATE.vadPollTimer); STATE.vadPollTimer = null; }
+      if (STATE.alignmentPollTimer) { clearTimeout(STATE.alignmentPollTimer); STATE.alignmentPollTimer = null; }
+      if (STATE.enhancePollTimer) { clearTimeout(STATE.enhancePollTimer); STATE.enhancePollTimer = null; }
+      if (STATE.vadPollTimer) { clearTimeout(STATE.vadPollTimer); STATE.vadPollTimer = null; }
       if (STATE.mp3EventSource) { STATE.mp3EventSource.close(); STATE.mp3EventSource = null; }
       resetHistKaraoke(); STATE.alignment = null; STATE.activeWordIndex = -1;
       STATE.nowPlaying = null;
@@ -3518,25 +3544,39 @@
       _stopKaraokeRAF();
     }
     function fetchAlignment(filename, version) {
-      if (STATE.alignmentPollTimer) { clearInterval(STATE.alignmentPollTimer); STATE.alignmentPollTimer = null; }
+      if (STATE.alignmentPollTimer) { clearTimeout(STATE.alignmentPollTimer); STATE.alignmentPollTimer = null; }
       const ver = version || STATE.activeVersion || 'original';
       const vParam = ver === 'cleaned' ? '?version=cleaned' : '';
       let alignPollCount = 0;
+      let consecutiveErrors = 0;
+      const MAX_CONSECUTIVE_ERRORS = 5;
       async function poll() {
-        if (++alignPollCount > 200) { clearInterval(STATE.alignmentPollTimer); STATE.alignmentPollTimer = null; _updateAlignDot(filename, 'failed'); console.warn('[alignment] poll timeout after 200 attempts'); return; }
+        if (++alignPollCount > 200) { STATE.alignmentPollTimer = null; _updateAlignDot(filename, 'failed'); console.warn('[alignment] poll timeout after 200 attempts'); return; }
         try {
           const data = await api(`/api/generation/${filename}/alignment${vParam}`);
+          consecutiveErrors = 0;
           if (data.status === 'ready' && data.word_alignment && data.word_alignment.length) {
-            clearInterval(STATE.alignmentPollTimer); STATE.alignmentPollTimer = null;
+            STATE.alignmentPollTimer = null;
             STATE.alignment = data.word_alignment; STATE.activeWordIndex = -1;
             _showHistKaraoke(filename); _updateAlignDot(filename, 'ready'); _startKaraokeRAF();
+            return;
           } else if (data.status === 'unavailable' || data.status === 'failed') {
-            clearInterval(STATE.alignmentPollTimer); STATE.alignmentPollTimer = null;
-            _updateAlignDot(filename, data.status);
+            STATE.alignmentPollTimer = null; _updateAlignDot(filename, data.status);
+            return;
           }
-        } catch (e) { console.error('[alignment] poll error:', e); }
+          STATE.alignmentPollTimer = setTimeout(poll, 1500);
+        } catch (e) {
+          consecutiveErrors++;
+          console.warn(`[alignment] poll error #${consecutiveErrors}:`, e.message);
+          if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+            const healthy = await checkServerHealth(30000);
+            if (!healthy) { STATE.alignmentPollTimer = null; _updateAlignDot(filename, 'failed'); return; }
+            consecutiveErrors = 0;
+          }
+          STATE.alignmentPollTimer = setTimeout(poll, Math.min(1500 * Math.pow(1.5, consecutiveErrors), 10000));
+        }
       }
-      poll(); STATE.alignmentPollTimer = setInterval(poll, 1500);
+      poll();
     }
     function _showHistKaraoke(filename) {
       const histItem = filename ? document.querySelector(`.hist-item[data-filename="${filename}"]`) || document.querySelector(`.hist-item[data-folder="${filename}"]`) : _activeHistItem();
@@ -3801,43 +3841,73 @@
       // Re-fetch alignment for the new version
       if (STATE.alignmentAvailable) fetchAlignment(np.filename, ver);
     }
-    function pollVersionStatuses(filename) {
-      if (STATE.enhancePollTimer) { clearInterval(STATE.enhancePollTimer); STATE.enhancePollTimer = null; }
-      if (STATE.vadPollTimer) { clearInterval(STATE.vadPollTimer); STATE.vadPollTimer = null; }
+    function pollVersionStatuses(filename, singleCheck) {
+      if (STATE.enhancePollTimer) { clearTimeout(STATE.enhancePollTimer); STATE.enhancePollTimer = null; }
+      if (STATE.vadPollTimer) { clearTimeout(STATE.vadPollTimer); STATE.vadPollTimer = null; }
       const enhBtn = document.querySelector('.ver-btn[data-ver="enhanced"]');
       const clnBtn = document.querySelector('.ver-btn[data-ver="cleaned"]');
       if (STATE.enhanceAvailable) {
         enhBtn.classList.add('is-loading'); showVersionGroup(true);
         let enhPollCount = 0;
+        let enhConsecErrors = 0;
+        const MAX_ENH_ERRORS = 5;
         async function pollEnh() {
-          if (++enhPollCount > 200) { clearInterval(STATE.enhancePollTimer); STATE.enhancePollTimer = null; enhBtn.classList.remove('is-loading'); console.warn('[enhance] poll timeout after 200 attempts'); return; }
+          if (++enhPollCount > (singleCheck ? 1 : 200)) { STATE.enhancePollTimer = null; enhBtn.classList.remove('is-loading'); if (!singleCheck) console.warn('[enhance] poll timeout after 200 attempts'); return; }
           try {
             const data = await api(`/api/generation/${filename}/enhance-status`);
-            if (data.status === 'ready' && data.enhanced_filename) { clearInterval(STATE.enhancePollTimer); STATE.enhancePollTimer = null; if (STATE.nowPlaying) STATE.nowPlaying._enhancedFilename = data.enhanced_filename; enhBtn.classList.remove('is-loading'); updateVersionBtns(); }
-            else if (data.status === 'unavailable' || data.status === 'failed') { clearInterval(STATE.enhancePollTimer); STATE.enhancePollTimer = null; enhBtn.classList.remove('is-loading'); }
-          } catch (e) { console.error('[enhance] poll error:', e); }
+            enhConsecErrors = 0;
+            if (data.status === 'ready' && data.enhanced_filename) { STATE.enhancePollTimer = null; if (STATE.nowPlaying) STATE.nowPlaying._enhancedFilename = data.enhanced_filename; enhBtn.classList.remove('is-loading'); updateVersionBtns(); return; }
+            else if (data.status === 'unavailable' || data.status === 'failed') { STATE.enhancePollTimer = null; enhBtn.classList.remove('is-loading'); return; }
+            if (singleCheck) { STATE.enhancePollTimer = null; enhBtn.classList.remove('is-loading'); return; }
+            STATE.enhancePollTimer = setTimeout(pollEnh, 1500);
+          } catch (e) {
+            enhConsecErrors++;
+            console.warn(`[enhance] poll error #${enhConsecErrors}:`, e.message);
+            if (singleCheck) { STATE.enhancePollTimer = null; enhBtn.classList.remove('is-loading'); return; }
+            if (enhConsecErrors >= MAX_ENH_ERRORS) {
+              const healthy = await checkServerHealth(30000);
+              if (!healthy) { STATE.enhancePollTimer = null; enhBtn.classList.remove('is-loading'); return; }
+              enhConsecErrors = 0;
+            }
+            STATE.enhancePollTimer = setTimeout(pollEnh, Math.min(1500 * Math.pow(1.5, enhConsecErrors), 10000));
+          }
         }
-        pollEnh(); STATE.enhancePollTimer = setInterval(pollEnh, 1500);
+        pollEnh();
       }
       if (STATE.vadAvailable) {
         clnBtn.classList.add('is-loading'); showVersionGroup(true);
         let vadPollCount = 0;
+        let vadConsecErrors = 0;
+        const MAX_VAD_ERRORS = 5;
         async function pollVad() {
-          if (++vadPollCount > 200) { clearInterval(STATE.vadPollTimer); STATE.vadPollTimer = null; clnBtn.classList.remove('is-loading'); console.warn('[vad] poll timeout after 200 attempts'); return; }
+          if (++vadPollCount > (singleCheck ? 1 : 200)) { STATE.vadPollTimer = null; clnBtn.classList.remove('is-loading'); if (!singleCheck) console.warn('[vad] poll timeout after 200 attempts'); return; }
           try {
             const data = await api(`/api/generation/${filename}/vad-status`);
+            vadConsecErrors = 0;
             if (data.status === 'ready' && data.cleaned_filename) {
-              clearInterval(STATE.vadPollTimer); STATE.vadPollTimer = null;
+              STATE.vadPollTimer = null;
               if (STATE.nowPlaying) {
                 STATE.nowPlaying._cleanedFilename = data.cleaned_filename;
                 try { const mp3Check = await api(`/api/generation/${data.cleaned_filename}/mp3-check`); if (mp3Check.exists) STATE.nowPlaying._cleanedMp3 = true; } catch (_) { }
                 updateCleanedMp3Btn();
               }
-              clnBtn.classList.remove('is-loading'); updateVersionBtns();
-            } else if (data.status === 'unavailable' || data.status === 'failed') { clearInterval(STATE.vadPollTimer); STATE.vadPollTimer = null; clnBtn.classList.remove('is-loading'); }
-          } catch (e) { console.error('[vad] poll error:', e); }
+              clnBtn.classList.remove('is-loading'); updateVersionBtns(); return;
+            } else if (data.status === 'unavailable' || data.status === 'failed') { STATE.vadPollTimer = null; clnBtn.classList.remove('is-loading'); return; }
+            if (singleCheck) { STATE.vadPollTimer = null; clnBtn.classList.remove('is-loading'); return; }
+            STATE.vadPollTimer = setTimeout(pollVad, 1500);
+          } catch (e) {
+            vadConsecErrors++;
+            console.warn(`[vad] poll error #${vadConsecErrors}:`, e.message);
+            if (singleCheck) { STATE.vadPollTimer = null; clnBtn.classList.remove('is-loading'); return; }
+            if (vadConsecErrors >= MAX_VAD_ERRORS) {
+              const healthy = await checkServerHealth(30000);
+              if (!healthy) { STATE.vadPollTimer = null; clnBtn.classList.remove('is-loading'); return; }
+              vadConsecErrors = 0;
+            }
+            STATE.vadPollTimer = setTimeout(pollVad, Math.min(1500 * Math.pow(1.5, vadConsecErrors), 10000));
+          }
         }
-        pollVad(); STATE.vadPollTimer = setInterval(pollVad, 1500);
+        pollVad();
       }
     }
     function updateEnhanceBtn() { updateVersionBtns(); }

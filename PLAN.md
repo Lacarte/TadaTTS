@@ -213,3 +213,83 @@ Implicit: torch, numpy, soundfile, huggingface-hub, onnxruntime, spacy (pulled b
 - [ ] Batch generation queue for automation pipelines
 - [ ] Audio waveform visualization during playback
 - [ ] Favicon
+
+
+////////////////// new features
+
+in the future i want to add a stream button that will play the audio as it generates 
+
+
+Generate vs Stream in Kokoro TTS
+Based on the screenshot, there are two modes for generating speech:
+ModeCharacter LimitHow It WorksGenerate~500 charsProcesses all text at once, returns complete audio fileStream~5000 charsProcesses in chunks, sends audio as it's generated
+
+Visual Explanation
+GENERATE MODE (500 chars max)
+─────────────────────────────
+Input: "Hello world, this is a test."
+         │
+         ▼
+    ┌─────────┐
+    │ Process │  ← Waits until complete
+    │   ALL   │
+    └─────────┘
+         │
+         ▼
+    [Complete WAV file]
+    
+    ⏱️ Wait... wait... wait... ✓ Done! Play entire audio
+
+
+STREAM MODE (5000 chars max)
+─────────────────────────────
+Input: "Hello world, this is a test. More text here..."
+         │
+         ▼
+    ┌─────────┐
+    │ Chunk 1 │ ──► 🔊 Play immediately
+    └─────────┘
+    ┌─────────┐
+    │ Chunk 2 │ ──► 🔊 Play next
+    └─────────┘
+    ┌─────────┐
+    │ Chunk 3 │ ──► 🔊 Continue...
+    └─────────┘
+    
+    ⏱️ Starts playing almost instantly!
+
+When to Use Each
+Use CaseModeWhyShort text (<500 chars)GenerateSimpler, single file outputLong text (articles, books)StreamFaster first response, handles more textReal-time applicationsStreamLower latency, progressive playbackDownloading audio fileGenerateComplete file at once
+
+In Code (kokoro-onnx)
+pythonfrom kokoro_onnx import Kokoro
+import soundfile as sf
+
+kokoro = Kokoro("kokoro-v1.0.onnx", "voices-v1.0.bin")
+
+# GENERATE MODE - returns complete audio
+samples, sr = kokoro.create(
+    text="Short text here",
+    voice="af_heart",
+    speed=1.0
+)
+sf.write("output.wav", samples, sr)
+
+
+# STREAM MODE - yields chunks as generated
+for chunk in kokoro.create_stream(
+    text="Very long text that could be thousands of characters...",
+    voice="af_heart",
+    speed=1.0
+):
+    # Process/play each chunk immediately
+    play_audio(chunk)
+
+Why Stream Allows More Characters
+FactorGenerateStreamMemoryHolds entire audio in RAMOnly holds current chunkGPU/CPU timeOne long operationMany short operationsUser experienceWait for allHear immediately
+Stream breaks the work into pieces, so it can handle longer text without running out of memory or timing out.
+
+TL;DR:
+
+Generate = Wait for complete audio (shorter text)
+Stream = Play as it generates (longer text, faster start)
