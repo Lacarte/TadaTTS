@@ -2,7 +2,7 @@
 :: Change to the directory where this script lives
 cd /d "%~dp0"
 
-echo Starting KittenTTS Studio...
+echo Starting Kokoro TTS Studio...
 
 call venv\Scripts\activate.bat
 
@@ -18,7 +18,7 @@ if %ERRORLEVEL% equ 0 (
 echo Found available port: %PORT%
 
 :: Start backend — use cmd /k so the window stays open if it crashes
-start "KittenTTS Backend" cmd /k "venv\Scripts\python.exe backend.py --port %PORT%"
+start "Kokoro TTS Backend" cmd /k "venv\Scripts\python.exe backend.py --port %PORT%"
 
 :: Wait for server to respond (up to 30 seconds)
 echo Waiting for server to start...
@@ -26,7 +26,7 @@ set TRIES=0
 :wait_loop
 if %TRIES% geq 30 (
     echo ERROR: Server did not start within 30 seconds.
-    echo Check the KittenTTS Backend window for errors.
+    echo Check the Kokoro TTS Backend window for errors.
     pause
     exit /b 1
 )
@@ -42,9 +42,9 @@ echo Server is ready!
 :: Open browser
 start http://localhost:%PORT%
 
-echo KittenTTS Studio is running at http://localhost:%PORT%
+echo Kokoro TTS Studio is running at http://localhost:%PORT%
 echo Press any key to stop...
 pause
 
 :: Cleanup
-taskkill /FI "WINDOWTITLE eq KittenTTS Backend*" /F >nul 2>&1
+taskkill /FI "WINDOWTITLE eq Kokoro TTS Backend*" /F >nul 2>&1

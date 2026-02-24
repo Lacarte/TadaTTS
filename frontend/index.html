@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>KittenTTS Studio</title>
+  <title>Kokoro TTS Studio</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -1444,7 +1444,7 @@
         </div>
         <div>
           <h3 class="font-display text-lg font-semibold" id="dl-title">Downloading Model</h3>
-          <p class="font-mono text-xs" style="color:var(--text-muted)" id="dl-subtitle">Kitten TTS Mini (80MB)</p>
+          <p class="font-mono text-xs" style="color:var(--text-muted)" id="dl-subtitle">Kokoro v1.0 (~373MB)</p>
         </div>
       </div>
       <div id="dl-files" class="space-y-3"></div>
@@ -1470,7 +1470,7 @@
         </svg>
       </div>
       <div class="brand-text">
-        <h1 class="font-display text-base font-bold tracking-tight" style="color:var(--text);line-height:1.1">KittenTTS
+        <h1 class="font-display text-base font-bold tracking-tight" style="color:var(--text);line-height:1.1">Kokoro
         </h1>
         <p class="text-[9px] font-bold tracking-[0.2em] uppercase" style="color:var(--accent);margin-top:1px">Studio</p>
       </div>
@@ -1584,14 +1584,10 @@
           <div style="position:relative">
             <select id="model-select" class="input-field"
               style="width:100%;padding:11px 14px;padding-right:90px;font-size:13px;font-weight:500">
-              <option value="mini">Kitten TTS Mini — 80M</option>
-              <option value="micro">Kitten TTS Micro — 40M</option>
-              <option value="nano">Kitten TTS Nano — 15M</option>
-              <option value="nano-int8">Kitten TTS Nano INT8 — 15M</option>
-              <option value="nano-fp32">Kitten TTS Nano FP32 — 15M</option>
+              <option value="kokoro">Kokoro v1.0 — 82M</option>
             </select>
             <span id="model-size" class="font-mono"
-              style="position:absolute;right:32px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:600;color:var(--accent);background:rgba(78,205,196,0.1);padding:2px 7px;border-radius:5px">80MB</span>
+              style="position:absolute;right:32px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:600;color:var(--accent);background:rgba(78,205,196,0.1);padding:2px 7px;border-radius:5px">~373MB</span>
             <svg
               style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-muted)"
               width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -1836,7 +1832,7 @@
           <div style="position:relative">
             <select id="speed-select" class="input-field"
               style="width:100%;padding:11px 14px;padding-right:32px;font-size:13px;font-weight:500;font-family:'JetBrains Mono',monospace"
-              onchange="localStorage.setItem('kittenTTS-speed',this.value)">
+              onchange="localStorage.setItem('kokoro-speed',this.value)">
             </select>
             <svg
               style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-muted)"
@@ -1855,7 +1851,7 @@
           <div style="position:relative">
             <select id="silence-select" class="input-field"
               style="width:100%;padding:11px 14px;padding-right:32px;font-size:13px;font-weight:500;font-family:'JetBrains Mono',monospace"
-              onchange="localStorage.setItem('kittenTTS-silence',this.value)" title="Remove silences longer than this">
+              onchange="localStorage.setItem('kokoro-silence',this.value)" title="Remove silences longer than this">
             </select>
             <svg
               style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-muted)"
@@ -1879,10 +1875,10 @@
           <div class="space-y-2">
             <div class="flex justify-between"><span class="text-sm"
                 style="color:var(--text-secondary)">Application</span><span class="font-mono text-sm"
-                style="color:var(--text)">KittenTTS Studio</span></div>
+                style="color:var(--text)">Kokoro TTS Studio</span></div>
             <div class="flex justify-between"><span class="text-sm"
                 style="color:var(--text-secondary)">Engine</span><span class="font-mono text-sm"
-                style="color:var(--text)">KittenML / ONNX</span></div>
+                style="color:var(--text)">kokoro-onnx</span></div>
             <div class="flex justify-between"><span class="text-sm" style="color:var(--text-secondary)">Sample
                 Rate</span><span class="font-mono text-sm" style="color:var(--text)">24,000 Hz</span></div>
             <div class="flex justify-between"><span class="text-sm" style="color:var(--text-secondary)">Built
@@ -2067,10 +2063,10 @@
     }
     function toggleSidebar() {
       document.getElementById('sidebar').classList.toggle('collapsed');
-      localStorage.setItem('kittenTTS-sidebar', document.getElementById('sidebar').classList.contains('collapsed'));
+      localStorage.setItem('kokoro-sidebar', document.getElementById('sidebar').classList.contains('collapsed'));
     }
     // Restore sidebar state
-    if (localStorage.getItem('kittenTTS-sidebar') === 'true') {
+    if (localStorage.getItem('kokoro-sidebar') === 'true') {
       document.getElementById('sidebar').classList.add('collapsed');
     }
 
@@ -2079,8 +2075,8 @@
     // ======================================================================
     const STATE = {
       models: [], voices: [],
-      selectedModel: localStorage.getItem('kittenTTS-model') || 'mini',
-      selectedVoice: localStorage.getItem('kittenTTS-voice') || 'Jasper',
+      selectedModel: localStorage.getItem('kokoro-model') || 'kokoro',
+      selectedVoice: localStorage.getItem('kokoro-voice') || 'af_bella',
       nowPlaying: null, isGenerating: false, history: [],
       dark: true, // Always dark in this design
       downloadEventSource: null, chunkEventSource: null, generateAbort: null, eqInterval: null, ffmpeg: false,
@@ -2094,11 +2090,53 @@
 
     const $ = s => document.querySelector(s);
     const $$ = s => document.querySelectorAll(s);
-    const MODEL_SIZES = { mini: '80MB', micro: '41MB', nano: '56MB', 'nano-int8': '19MB', 'nano-fp32': '~56MB' };
+    const MODEL_SIZES = { kokoro: '~373MB' };
+    const LANG_NAMES = {
+      'en-us': 'American English', 'en-gb': 'British English', 'ja': 'Japanese',
+      'zh': 'Chinese', 'es': 'Spanish', 'fr': 'French', 'hi': 'Hindi',
+      'it': 'Italian', 'pt-br': 'Portuguese'
+    };
     const VOICE_META = {
-      Bella: { g: 'f', hue: '#FF9B9B' }, Jasper: { g: 'm', hue: '#6FE3DA' }, Luna: { g: 'f', hue: '#C4B5FD' },
-      Bruno: { g: 'm', hue: '#FFE66D' }, Rosie: { g: 'f', hue: '#FFC2C2' }, Hugo: { g: 'm', hue: '#A8EFE9' },
-      Kiki: { g: 'f', hue: '#FFEC7A' }, Leo: { g: 'm', hue: '#7B90A9' }
+      // American Female — coral/pink
+      af_alloy:   { g:'f', hue:'#FF9B9B', lang:'en-us' }, af_aoede:   { g:'f', hue:'#FFB5B5', lang:'en-us' },
+      af_bella:   { g:'f', hue:'#FF8A8A', lang:'en-us' }, af_heart:   { g:'f', hue:'#FF7070', lang:'en-us' },
+      af_jessica: { g:'f', hue:'#FFA5A5', lang:'en-us' }, af_kore:    { g:'f', hue:'#FFCECE', lang:'en-us' },
+      af_nicole:  { g:'f', hue:'#FF8080', lang:'en-us' }, af_nova:    { g:'f', hue:'#FFD0D0', lang:'en-us' },
+      af_river:   { g:'f', hue:'#FFB0B0', lang:'en-us' }, af_sarah:   { g:'f', hue:'#FF9595', lang:'en-us' },
+      af_sky:     { g:'f', hue:'#FFBABA', lang:'en-us' },
+      // American Male — teal
+      am_adam:    { g:'m', hue:'#6FE3DA', lang:'en-us' }, am_echo:    { g:'m', hue:'#5ED5CC', lang:'en-us' },
+      am_eric:    { g:'m', hue:'#7EEFEA', lang:'en-us' }, am_fenrir:  { g:'m', hue:'#4ECDC4', lang:'en-us' },
+      am_liam:    { g:'m', hue:'#6DE0D8', lang:'en-us' }, am_michael: { g:'m', hue:'#8AF0E8', lang:'en-us' },
+      am_onyx:    { g:'m', hue:'#5CD8D0', lang:'en-us' }, am_puck:    { g:'m', hue:'#7AE8E0', lang:'en-us' },
+      // British Female — purple/lavender
+      bf_alice:    { g:'f', hue:'#C4B5FD', lang:'en-gb' }, bf_emma:     { g:'f', hue:'#D4C5FF', lang:'en-gb' },
+      bf_isabella: { g:'f', hue:'#B4A5ED', lang:'en-gb' }, bf_lily:     { g:'f', hue:'#E4D5FF', lang:'en-gb' },
+      // British Male — steel blue
+      bm_daniel: { g:'m', hue:'#7B90A9', lang:'en-gb' }, bm_fable:  { g:'m', hue:'#8BA0B9', lang:'en-gb' },
+      bm_george: { g:'m', hue:'#6B80A0', lang:'en-gb' }, bm_lewis:  { g:'m', hue:'#9BB0C9', lang:'en-gb' },
+      // Japanese — sakura pink / muted blue
+      jf_alpha:      { g:'f', hue:'#FFB7C5', lang:'ja' }, jf_gongitsune: { g:'f', hue:'#FFC7D5', lang:'ja' },
+      jf_nezumi:     { g:'f', hue:'#FFD7E5', lang:'ja' }, jf_tebukuro:   { g:'f', hue:'#FFA7B5', lang:'ja' },
+      jm_kumo:       { g:'m', hue:'#A0B4C8', lang:'ja' },
+      // Chinese — gold
+      zf_xiaobei:  { g:'f', hue:'#FFD700', lang:'zh' }, zf_xiaoni:   { g:'f', hue:'#FFE740', lang:'zh' },
+      zf_xiaoxuan: { g:'f', hue:'#FFC800', lang:'zh' }, zf_xiaoyi:   { g:'f', hue:'#FFF060', lang:'zh' },
+      zm_yunjian:  { g:'m', hue:'#E8B800', lang:'zh' }, zm_yunxi:    { g:'m', hue:'#D8A800', lang:'zh' },
+      zm_yunxia:   { g:'m', hue:'#C89800', lang:'zh' }, zm_yunyang:  { g:'m', hue:'#F0C000', lang:'zh' },
+      // Spanish — warm orange
+      ef_dora:  { g:'f', hue:'#FFB074', lang:'es' }, em_alex:  { g:'m', hue:'#FFA060', lang:'es' },
+      em_santa: { g:'m', hue:'#FF9050', lang:'es' },
+      // French — soft mauve
+      ff_siwis: { g:'f', hue:'#D4A0D0', lang:'fr' },
+      // Hindi — saffron
+      hf_alpha: { g:'f', hue:'#FFB347', lang:'hi' }, hf_beta:  { g:'f', hue:'#FFC370', lang:'hi' },
+      hm_omega: { g:'m', hue:'#E0A030', lang:'hi' }, hm_psi:   { g:'m', hue:'#D09020', lang:'hi' },
+      // Italian — warm green
+      if_sara:   { g:'f', hue:'#90D890', lang:'it' }, im_nicola: { g:'m', hue:'#70C870', lang:'it' },
+      // Portuguese — ocean blue
+      pf_dora:  { g:'f', hue:'#70B0E0', lang:'pt-br' }, pm_alex:  { g:'m', hue:'#60A0D0', lang:'pt-br' },
+      pm_santa: { g:'m', hue:'#5090C0', lang:'pt-br' },
     };
 
     // ======================================================================
@@ -2177,7 +2215,7 @@
           if (val === '1.00') opt.selected = true;
           speedSel.appendChild(opt);
         }
-        const savedSpeed = localStorage.getItem('kittenTTS-speed');
+        const savedSpeed = localStorage.getItem('kokoro-speed');
         if (savedSpeed && speedSel.querySelector(`option[value="${savedSpeed}"]`)) speedSel.value = savedSpeed;
         // Silence threshold
         if (STATE.vadAvailable) {
@@ -2190,12 +2228,12 @@
             if (ms === 500) opt.selected = true;
             silSel.appendChild(opt);
           }
-          const savedSil = localStorage.getItem('kittenTTS-silence');
+          const savedSil = localStorage.getItem('kokoro-silence');
           if (savedSil && silSel.querySelector(`option[value="${savedSil}"]`)) silSel.value = savedSil;
         }
         $('#model-select').value = STATE.selectedModel;
         $('#model-size').textContent = MODEL_SIZES[STATE.selectedModel] || '';
-        const savedPrompt = localStorage.getItem('kittenTTS-prompt');
+        const savedPrompt = localStorage.getItem('kokoro-prompt');
         if (savedPrompt) { $('#prompt-input').value = _stripBrackets(savedPrompt); updateCounts(); }
         renderVoices(); buildEqualizer(); await loadHistory();
       } catch (e) { console.error('Init:', e); toast('Failed to connect to server', 'error'); }
@@ -2206,31 +2244,57 @@
     // ======================================================================
     function renderVoices() {
       const g = $('#voice-grid'); g.innerHTML = '';
-      STATE.voices.forEach((v, i) => {
-        const meta = VOICE_META[v] || { g: 'm', hue: '#AAB8CC' };
-        const chip = document.createElement('button');
-        chip.className = 'voice-chip';
-        chip.dataset.voice = v; chip.dataset.active = 'false';
-        const genderLabel = meta.g === 'f' ? 'F' : 'M';
-        chip.innerHTML = `<span class="gender-dot" style="background:${meta.hue}"></span>${v}<span class="gender-tag gender-${meta.g}">${genderLabel}</span>`;
-        chip.style.animationDelay = `${i * 0.03}s`;
-        chip.tabIndex = 0;
-        chip.onclick = () => selectVoice(v);
-        chip.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectVoice(v); } };
-        g.appendChild(chip);
+      // Group voices by language
+      const groups = {};
+      let idx = 0;
+      STATE.voices.forEach(v => {
+        const meta = VOICE_META[v] || { g: 'm', hue: '#AAB8CC', lang: 'en-us' };
+        const lang = meta.lang || 'en-us';
+        if (!groups[lang]) groups[lang] = [];
+        groups[lang].push(v);
       });
+      // Ordered language keys
+      const langOrder = ['en-us','en-gb','ja','zh','es','fr','hi','it','pt-br'];
+      const sortedLangs = Object.keys(groups).sort((a, b) => {
+        const ia = langOrder.indexOf(a), ib = langOrder.indexOf(b);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      });
+      for (const lang of sortedLangs) {
+        // Language header
+        const header = document.createElement('div');
+        header.className = 'w-full';
+        header.style.cssText = 'font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:var(--text-muted);margin-top:8px;margin-bottom:4px';
+        header.textContent = LANG_NAMES[lang] || lang;
+        g.appendChild(header);
+        // Voice chips
+        groups[lang].forEach(v => {
+          const meta = VOICE_META[v] || { g: 'm', hue: '#AAB8CC' };
+          const chip = document.createElement('button');
+          chip.className = 'voice-chip';
+          chip.dataset.voice = v; chip.dataset.active = 'false';
+          const genderLabel = meta.g === 'f' ? 'F' : 'M';
+          const displayName = v.includes('_') ? v.split('_').slice(1).join('_') : v;
+          chip.innerHTML = `<span class="gender-dot" style="background:${meta.hue}"></span>${displayName}<span class="gender-tag gender-${meta.g}">${genderLabel}</span>`;
+          chip.style.animationDelay = `${idx * 0.02}s`;
+          chip.tabIndex = 0;
+          chip.onclick = () => selectVoice(v);
+          chip.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectVoice(v); } };
+          g.appendChild(chip);
+          idx++;
+        });
+      }
       selectVoice(STATE.selectedVoice);
     }
     function selectVoice(v) {
       STATE.selectedVoice = v;
-      localStorage.setItem('kittenTTS-voice', v);
+      localStorage.setItem('kokoro-voice', v);
       $$('.voice-chip').forEach(c => { c.dataset.active = c.dataset.voice === v ? 'true' : 'false'; });
     }
 
     // ======================================================================
     // Prompt Counter
     // ======================================================================
-    $('#prompt-input').addEventListener('input', () => { updateCounts(); localStorage.setItem('kittenTTS-prompt', $('#prompt-input').value); });
+    $('#prompt-input').addEventListener('input', () => { updateCounts(); localStorage.setItem('kokoro-prompt', $('#prompt-input').value); });
     function updateCounts() {
       const t = $('#prompt-input').value.replace(/[\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
       const w = t ? t.split(/\s+/).length : 0;
@@ -2253,7 +2317,7 @@
         });
         input.value = res.normalized;
         updateCounts();
-        localStorage.setItem('kittenTTS-prompt', input.value);
+        localStorage.setItem('kokoro-prompt', input.value);
         toast('Text normalized for TTS');
       } catch (e) { toast(e.message || 'Normalization failed', 'error'); }
       finally { btn.disabled = false; btn.textContent = orig; }
@@ -2270,7 +2334,7 @@
     // ======================================================================
     $('#model-select').addEventListener('change', e => {
       STATE.selectedModel = e.target.value;
-      localStorage.setItem('kittenTTS-model', STATE.selectedModel);
+      localStorage.setItem('kokoro-model', STATE.selectedModel);
       $('#model-size').textContent = MODEL_SIZES[STATE.selectedModel] || '';
     });
 
@@ -2486,7 +2550,7 @@
       try {
         try {
           const fmt = await api('/api/normalize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: prompt }), signal: abort.signal });
-          if (fmt.normalized && fmt.normalized !== prompt) { $('#prompt-input').value = fmt.normalized; updateCounts(); localStorage.setItem('kittenTTS-prompt', fmt.normalized); }
+          if (fmt.normalized && fmt.normalized !== prompt) { $('#prompt-input').value = fmt.normalized; updateCounts(); localStorage.setItem('kokoro-prompt', fmt.normalized); }
         } catch (_) { if (abort.signal.aborted) throw new DOMException('Aborted', 'AbortError'); }
         const status = await api(`/api/model-status/${STATE.selectedModel}`, { signal: abort.signal });
         if (!status.cached) await downloadModel(STATE.selectedModel);
@@ -3185,7 +3249,7 @@
       const text = _stripBrackets(STATE.history[idx].prompt || '');
       $('#prompt-input').value = text;
       updateCounts();
-      localStorage.setItem('kittenTTS-prompt', text);
+      localStorage.setItem('kokoro-prompt', text);
       toast('Loaded into prompt');
     }
     function timeAgo(ts) {

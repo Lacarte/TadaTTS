@@ -1,19 +1,22 @@
-## KittenTTS Web Studio -- Project Brief
+## Kokoro TTS Studio -- Project Brief
 
 ### Goal
-A complete web application for KittenTTS text-to-speech generation with a Flask backend, dark-themed single-page frontend, real-time model download progress, multi-step audio processing pipeline, history management, and one-click startup.
+A complete web application for Kokoro TTS text-to-speech generation with a Flask backend, dark-themed single-page frontend, real-time model download progress, multi-step audio processing pipeline, history management, and one-click startup.
 
 ---
 
 ### Project Structure
 ```
-KittenTTS-Studio/
-+-- main.py                 # Original CLI script (UNCHANGED)
+KokoroTTS-Studio/
++-- main.py                 # Original CLI script
 +-- backend.py              # Flask API server (~2,100 lines)
 +-- requirements.txt        # Python dependencies
 +-- runner.bat              # Windows one-click launcher (health-check polling)
 +-- setup.bat               # Environment setup (auto-downloads Python 3.12 if needed)
 +-- PLAN.md                 # Architecture notes and session log
++-- models/                 # Kokoro model files (auto-downloaded, gitignored)
+|   +-- kokoro-v1.0.onnx    # TTS model (~326MB)
+|   +-- voices-v1.0.bin     # Voice embeddings (~47MB)
 +-- bin/                    # Local ffmpeg (optional, gitignored)
 +-- logs/                   # Loguru rotating logs (gitignored)
 +-- generated_assets/       # All generated output (gitignored)
@@ -28,7 +31,7 @@ KittenTTS-Studio/
 |   +-- force-alignment/    # Standalone alignment results
 |       +-- TRASH/          # Soft-deleted alignment files
 +-- frontend/
-    +-- index.html          # Single-file UI (~2,700 lines, inline CSS/JS, Tailwind CDN)
+    +-- index.html          # Single-file UI (~2,800 lines, inline CSS/JS, Tailwind CDN)
 ```
 
 ---
@@ -39,17 +42,17 @@ KittenTTS-Studio/
 
 **Core Logic:** Based on `main.py`:
 ```python
-from kittentts import KittenTTS
+from kokoro_onnx import Kokoro
 import soundfile as sf
 import time
 
-m = KittenTTS("KittenML/kitten-tts-mini-0.8")
+kokoro = Kokoro("models/kokoro-v1.0.onnx", "models/voices-v1.0.bin")
 
 start = time.perf_counter()
-audio = m.generate(prompt, voice=voice)
+audio, sr = kokoro.create(prompt, voice="af_bella", speed=1.0, lang="en-us")
 end = time.perf_counter()
 
-duration_generated = len(audio) / 24000
+duration_generated = len(audio) / sr
 inference_time = end - start
 rtf = inference_time / duration_generated
 ```
@@ -81,10 +84,10 @@ Each post-processor uses its own background thread with per-basename metadata lo
 |----------|--------|-------------|
 | `/` | GET | Serve `frontend/index.html` |
 | `/api/health` | GET | Status + feature flags (ffmpeg, alignment, enhance, VAD) |
-| `/api/models` | GET | List 5 models with specs |
-| `/api/voices` | GET | 8 voices |
+| `/api/models` | GET | List models with specs |
+| `/api/voices` | GET | All available voices |
 | `/api/normalize` | POST | Text normalization + breathing-block formatting |
-| `/api/model-status/<id>` | GET | Check if model is cached |
+| `/api/model-status/<id>` | GET | Check if model files are present |
 | `/api/download-model/<id>` | GET (SSE) | Stream download progress in real-time |
 | `/api/generate` | POST | `{model, voice, prompt, speed, max_silence_ms}` |
 | `/api/generate-progress/<job_id>` | GET (SSE) | Stream chunked generation progress |
@@ -108,9 +111,9 @@ Each post-processor uses its own background thread with per-basename metadata lo
 
 **SSE Download Progress Format:**
 ```
-data: {"phase": "checking", "model": "mini"}
-data: {"phase": "downloading", "file": "config.json", "progress": 100, "size": "470B", "speed": "2.81MB/s"}
-data: {"phase": "downloading", "file": "kitten_tts_mini_v0_8.onnx", "progress": 78, "total_mb": 78.3, "downloaded_mb": 61.2, "speed": "87.6MB/s"}
+data: {"phase": "checking", "model": "kokoro"}
+data: {"phase": "downloading", "file": "kokoro-v1.0.onnx", "progress": 78, "total_mb": 326.0, "downloaded_mb": 254.3, "speed": "87.6MB/s"}
+data: {"phase": "downloading", "file": "voices-v1.0.bin", "progress": 100, "total_mb": 47.0, "downloaded_mb": 47.0, "speed": "92.1MB/s"}
 data: {"phase": "ready", "message": "Model ready"}
 ```
 
@@ -130,8 +133,9 @@ def generate_filename(prompt):
 {
   "filename": "reports-of-my-death_20250220_143052.wav",
   "prompt": "The reports of my death are greatly exaggerated...",
-  "model": "kitten-tts-mini-0.8",
-  "voice": "Jasper",
+  "model": "kokoro-v1.0",
+  "model_id": "kokoro",
+  "voice": "af_bella",
   "timestamp": "2025-02-20T14:30:52",
   "inference_time": 1.234,
   "rtf": 0.15,
@@ -151,7 +155,7 @@ def generate_filename(prompt):
 
 ### 2. FRONTEND (`frontend/index.html`)
 
-**Architecture:** Single file (~2,700 lines), inline CSS/JS, served by Flask
+**Architecture:** Single file (~2,800 lines), inline CSS/JS, served by Flask
 
 **Tech Stack:**
 - Tailwind CSS v3 via CDN (custom dark palette, NO default blue/indigo)
@@ -182,8 +186,8 @@ def generate_filename(prompt):
 **4 Pages (sidebar navigation):**
 
 1. **TTS (Generate)**
-   - Model dropdown with 5 models + size badge
-   - 8 clickable voice chips with gender indicator dots (F/M)
+   - Single model display (Kokoro v1.0) with size badge
+   - 50+ clickable voice chips grouped by language with gender indicator dots (F/M)
    - Prompt textarea with word/token counter
    - Format button (calls `/api/normalize`) + Copy button
    - Ctrl+Enter shortcut hint
@@ -234,7 +238,7 @@ def generate_filename(prompt):
 
 **`requirements.txt`:**
 ```
-https://github.com/KittenML/KittenTTS/releases/download/0.8/kittentts-0.8.0-py3-none-any.whl
+kokoro-onnx
 flask
 flask-cors
 loguru
@@ -261,29 +265,45 @@ num2words
 
 ### 4. MODEL CONFIGURATION
 
-**Available Models:**
+**Model:** Kokoro v1.0 (82M params, ~373MB total)
+- Model file: `kokoro-v1.0.onnx` (~326MB) — downloaded from GitHub Releases
+- Voices file: `voices-v1.0.bin` (~47MB) — downloaded from GitHub Releases
+- Source: [thewh1teagle/kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx)
+- Sample rate: 24,000 Hz
 
-| ID | Name | Params | Size | Repository |
-|----|------|--------|------|------------|
-| `mini` | Kitten TTS Mini | 80M | 80MB | KittenML/kitten-tts-mini-0.8 |
-| `micro` | Kitten TTS Micro | 40M | 41MB | KittenML/kitten-tts-micro-0.8 |
-| `nano` | Kitten TTS Nano | 15M | 56MB | KittenML/kitten-tts-nano-0.8 |
-| `nano-int8` | Kitten TTS Nano INT8 | 15M | 19MB | KittenML/kitten-tts-nano-0.8-int8 |
-| `nano-fp32` | Kitten TTS Nano FP32 | 15M | ~56MB | KittenML/kitten-tts-nano-0.8-fp32 |
+**Voices (50+ multilingual):**
 
-**Voices:** Bella, Jasper, Luna, Bruno, Rosie, Hugo, Kiki, Leo
+| Prefix | Language | Gender | Voices |
+|--------|----------|--------|--------|
+| `af_` | American English | Female | alloy, aoede, bella, heart, jessica, kore, nicole, nova, river, sarah, sky |
+| `am_` | American English | Male | adam, echo, eric, fenrir, liam, michael, onyx, puck |
+| `bf_` | British English | Female | alice, emma, isabella, lily |
+| `bm_` | British English | Male | daniel, fable, george, lewis |
+| `jf_` | Japanese | Female | alpha, gongitsune, nezumi, tebukuro |
+| `jm_` | Japanese | Male | kumo |
+| `zf_` | Chinese | Female | xiaobei, xiaoni, xiaoxuan, xiaoyi |
+| `zm_` | Chinese | Male | yunjian, yunxi, yunxia, yunyang |
+| `ef_` | Spanish | Female | dora |
+| `em_` | Spanish | Male | alex, santa |
+| `ff_` | French | Female | siwis |
+| `hf_` | Hindi | Female | alpha, beta |
+| `hm_` | Hindi | Male | omega, psi |
+| `if_` | Italian | Female | sara |
+| `im_` | Italian | Male | nicola |
+| `pf_` | Portuguese | Female | dora |
+| `pm_` | Portuguese | Male | alex, santa |
 
-> Voice names are aliases defined in each model's `config.json`. The underlying package voices are `expr-voice-{2-5}-{m,f}`. Voice availability may vary by model.
+> Language is auto-derived from voice prefix via `_voice_to_lang()`. The `lang` parameter is passed to `kokoro.create()` automatically.
 
 ---
 
 ### 5. IMPLEMENTED FEATURES
 
-- [x] `main.py` works exactly as original CLI tool
+- [x] `main.py` works as standalone CLI tool
 - [x] `backend.py` serves API and frontend on auto-detected port
 - [x] Frontend is single `index.html` with inline Tailwind CSS (custom dark colors, no blue/indigo)
 - [x] Mobile-first responsive (320px to 1440px+) with sidebar + bottom tab bar
-- [x] Model download shows real-time progress via SSE
+- [x] Model download shows real-time progress via SSE (from GitHub Releases)
 - [x] Generation shows 4-step processing stepper with token count estimation
 - [x] Audio auto-plays on completion with native player
 - [x] Files saved to `generated_assets/tts/<basename>/` with metadata JSON
@@ -312,6 +332,7 @@ num2words
 - [x] Retroactive processing (trigger alignment/enhancement/VAD on old files)
 - [x] Open generation folder in OS file explorer
 - [x] Copy prompt to clipboard
+- [x] 50+ multilingual voices grouped by language in UI
 
 ---
 

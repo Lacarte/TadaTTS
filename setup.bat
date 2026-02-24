@@ -2,7 +2,7 @@
 :: Change to the directory where this script lives
 cd /d "%~dp0"
 
-echo Setting up KittenTTS Studio...
+echo Setting up Kokoro TTS Studio...
 
 :: If venv already exists, skip Python install entirely
 if exist venv\Scripts\python.exe (

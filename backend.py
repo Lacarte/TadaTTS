@@ -1,4 +1,4 @@
-"""KittenTTS Studio — Flask API Server"""
+"""Kokoro TTS Studio — Flask API Server"""
 
 import argparse
 import hashlib
@@ -19,9 +19,8 @@ import numpy as np
 import soundfile as sf
 from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_cors import CORS
-from huggingface_hub import hf_hub_download, try_to_load_from_cache
+import urllib.request
 from loguru import logger
-from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
 # Loguru configuration
@@ -57,7 +56,7 @@ def _console_format(record):
 logger.add(sys.stderr, level="INFO", format=_console_format, colorize=True)
 
 # File: DEBUG and above, rotated daily, kept 7 days
-logger.add(os.path.join(LOG_DIR, "kittentts_{time:YYYY-MM-DD}.log"),
+logger.add(os.path.join(LOG_DIR, "kokoro_{time:YYYY-MM-DD}.log"),
            level="DEBUG", rotation="1 day", retention="7 days", compression="zip",
            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<7} | {name}:{function}:{line} - {message}")
 
@@ -76,44 +75,71 @@ os.makedirs(TRASH_DIR, exist_ok=True)
 os.makedirs(ALIGN_DIR, exist_ok=True)
 os.makedirs(ALIGN_TRASH_DIR, exist_ok=True)
 
+MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
+os.makedirs(MODELS_DIR, exist_ok=True)
+
 MODELS = {
-    "mini": {
-        "name": "Kitten TTS Mini",
-        "params": "80M",
-        "size": "80MB",
-        "repo": "KittenML/kitten-tts-mini-0.8",
-    },
-    "micro": {
-        "name": "Kitten TTS Micro",
-        "params": "40M",
-        "size": "41MB",
-        "repo": "KittenML/kitten-tts-micro-0.8",
-    },
-    "nano": {
-        "name": "Kitten TTS Nano",
-        "params": "15M",
-        "size": "56MB",
-        "repo": "KittenML/kitten-tts-nano-0.8",
-    },
-    "nano-int8": {
-        "name": "Kitten TTS Nano INT8",
-        "params": "15M",
-        "size": "19MB",
-        "repo": "KittenML/kitten-tts-nano-0.8-int8",
-    },
-    "nano-fp32": {
-        "name": "Kitten TTS Nano FP32",
-        "params": "15M",
-        "size": "~56MB",
-        "repo": "KittenML/kitten-tts-nano-0.8-fp32",
+    "kokoro": {
+        "name": "Kokoro v1.0",
+        "size": "~373MB",
+        "onnx_file": "kokoro-v1.0.onnx",
+        "voices_file": "voices-v1.0.bin",
+        "onnx_url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
+        "voices_url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
     },
 }
 
-VOICES = ["Rosie", "Hugo", "Bella", "Bruno", "Jasper", "Luna", "Kiki", "Leo"]
+# Voice prefix -> language code mapping for kokoro-onnx
+VOICE_LANG_MAP = {
+    "af": "en-us", "am": "en-us",
+    "bf": "en-gb", "bm": "en-gb",
+    "jf": "ja",    "jm": "ja",
+    "zf": "zh",    "zm": "zh",
+    "ef": "es",    "em": "es",
+    "ff": "fr",
+    "hf": "hi",    "hm": "hi",
+    "if": "it",    "im": "it",
+    "pf": "pt-br", "pm": "pt-br",
+}
 
-# Cache of loaded KittenTTS model instances: {model_id: KittenTTS}
-loaded_models = {}
-model_lock = threading.Lock()
+VOICES = [
+    # American Female
+    "af_alloy", "af_aoede", "af_bella", "af_heart", "af_jessica",
+    "af_kore", "af_nicole", "af_nova", "af_river", "af_sarah", "af_sky",
+    # American Male
+    "am_adam", "am_echo", "am_eric", "am_fenrir", "am_liam",
+    "am_michael", "am_onyx", "am_puck",
+    # British Female
+    "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
+    # British Male
+    "bm_daniel", "bm_fable", "bm_george", "bm_lewis",
+    # Japanese
+    "jf_alpha", "jf_gongitsune", "jf_nezumi", "jf_tebukuro", "jm_kumo",
+    # Chinese
+    "zf_xiaobei", "zf_xiaoni", "zf_xiaoxuan", "zf_xiaoyi",
+    "zm_yunjian", "zm_yunxi", "zm_yunxia", "zm_yunyang",
+    # Spanish
+    "ef_dora", "em_alex", "em_santa",
+    # French
+    "ff_siwis",
+    # Hindi
+    "hf_alpha", "hf_beta", "hm_omega", "hm_psi",
+    # Italian
+    "if_sara", "im_nicola",
+    # Portuguese
+    "pf_dora", "pm_alex", "pm_santa",
+]
+
+
+def _voice_to_lang(voice_name: str) -> str:
+    """Derive the kokoro-onnx lang parameter from a voice name prefix."""
+    prefix = voice_name.split("_")[0] if "_" in voice_name else voice_name[:2]
+    return VOICE_LANG_MAP.get(prefix, "en-us")
+
+
+# Cached Kokoro instance (single model)
+kokoro_instance = None
+kokoro_lock = threading.Lock()
 
 # Alignment model (stable-ts / Whisper) — optional feature
 alignment_model = None
@@ -598,88 +624,90 @@ def find_available_port(start: int = 5000) -> int:
     return start
 
 
-def is_model_cached(repo_id: str) -> bool:
-    """Check if config.json is already in the HF cache (quick proxy check)."""
-    result = try_to_load_from_cache(repo_id, "config.json")
-    return result is not None and not isinstance(result, str) is False
+def _model_files_present() -> bool:
+    """Check if both kokoro model files exist locally."""
+    cfg = MODELS["kokoro"]
+    onnx_path = os.path.join(MODELS_DIR, cfg["onnx_file"])
+    voices_path = os.path.join(MODELS_DIR, cfg["voices_file"])
+    return os.path.isfile(onnx_path) and os.path.isfile(voices_path)
 
 
-def get_model_files(repo_id: str) -> list[str]:
-    """Download config.json (usually cached) and return [config, model_file, voices]."""
-    config_path = try_to_load_from_cache(repo_id, "config.json")
-    if config_path and isinstance(config_path, str):
-        with open(config_path, "r") as f:
-            cfg = json.load(f)
-        return ["config.json", cfg["model_file"], cfg["voices"]]
-    return ["config.json"]
+def load_model():
+    """Load (or return cached) Kokoro instance."""
+    global kokoro_instance
+    if kokoro_instance is not None:
+        return kokoro_instance
 
+    from kokoro_onnx import Kokoro
 
-def load_model(model_id: str):
-    """Load (or return cached) KittenTTS model instance."""
-    if model_id in loaded_models:
-        return loaded_models[model_id]
+    cfg = MODELS["kokoro"]
+    onnx_path = os.path.join(MODELS_DIR, cfg["onnx_file"])
+    voices_path = os.path.join(MODELS_DIR, cfg["voices_file"])
 
-    repo = MODELS[model_id]["repo"]
-    from kittentts import KittenTTS
-
-    with model_lock:
-        if model_id not in loaded_models:
-            logger.info("Loading model \033[1m{}\033[0m ...", model_id)
-            loaded_models[model_id] = KittenTTS(repo)
-            logger.success("Model \033[1m{}\033[0m ready", model_id)
-    return loaded_models[model_id]
+    with kokoro_lock:
+        if kokoro_instance is None:
+            logger.info("Loading Kokoro model ...")
+            kokoro_instance = Kokoro(onnx_path, voices_path)
+            try:
+                available = kokoro_instance.get_voices()
+                if available:
+                    global VOICES
+                    VOICES = sorted(available)
+            except Exception:
+                pass
+            logger.success("Kokoro model ready")
+    return kokoro_instance
 
 
 # ---------------------------------------------------------------------------
-# SSE Progress tqdm
+# HTTP download with SSE progress
 # ---------------------------------------------------------------------------
 
 
-class SSEProgressCapture(tqdm):
-    """Custom tqdm that pushes progress events to a Queue for SSE streaming."""
+def _download_file_with_progress(url: str, dest_path: str, queue: Queue, label: str):
+    """Download a file from URL, pushing SSE progress events to a queue."""
+    tmp_path = dest_path + ".tmp"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "KokoroTTS-Studio/1.0"})
+        with urllib.request.urlopen(req, timeout=60) as response:
+            total = int(response.headers.get("Content-Length", 0))
+            downloaded = 0
+            chunk_size = 256 * 1024
+            start_time = time.time()
 
-    progress_queue: Queue | None = None
+            with open(tmp_path, "wb") as f:
+                while True:
+                    chunk = response.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    elapsed = time.time() - start_time
+                    speed = downloaded / max(elapsed, 0.001)
+                    progress = int((downloaded / total) * 100) if total else 0
 
-    def __init__(self, *args, **kwargs):
-        self._sse_queue = kwargs.pop("sse_queue", None) or getattr(
-            SSEProgressCapture, "progress_queue", None
-        )
-        kwargs.pop("name", None)
-        super().__init__(*args, **kwargs)
+                    if speed >= 1_000_000:
+                        speed_str = f"{speed / 1_000_000:.1f}MB/s"
+                    elif speed >= 1_000:
+                        speed_str = f"{speed / 1_000:.1f}KB/s"
+                    else:
+                        speed_str = f"{speed:.0f}B/s"
 
-    def update(self, n=1):
-        super().update(n)
-        if self._sse_queue is None:
-            return
-        total = self.total or 0
-        downloaded = self.n or 0
-        progress = int((downloaded / total) * 100) if total else 0
-        speed = self.format_dict.get("rate", 0) or 0
+                    queue.put({
+                        "phase": "downloading",
+                        "file": label,
+                        "progress": progress,
+                        "downloaded_mb": round(downloaded / 1_000_000, 2),
+                        "total_mb": round(total / 1_000_000, 2),
+                        "size": f"{total / 1_000_000:.1f}MB",
+                        "speed": speed_str,
+                    })
 
-        if speed >= 1_000_000:
-            speed_str = f"{speed / 1_000_000:.1f}MB/s"
-        elif speed >= 1_000:
-            speed_str = f"{speed / 1_000:.1f}KB/s"
-        else:
-            speed_str = f"{speed:.0f}B/s"
-
-        if total >= 1_000_000:
-            size_str = f"{total / 1_000_000:.2f}MB"
-        elif total >= 1_000:
-            size_str = f"{total / 1_000:.1f}KB"
-        else:
-            size_str = f"{total}B"
-
-        event = {
-            "phase": "downloading",
-            "file": self.desc or "unknown",
-            "progress": progress,
-            "downloaded_mb": round(downloaded / 1_000_000, 2),
-            "total_mb": round(total / 1_000_000, 2),
-            "size": size_str,
-            "speed": speed_str,
-        }
-        self._sse_queue.put(event)
+        os.replace(tmp_path, dest_path)
+    except Exception:
+        if os.path.isfile(tmp_path):
+            os.remove(tmp_path)
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -734,7 +762,7 @@ def normalize_text():
 def models():
     out = []
     for mid, m in MODELS.items():
-        out.append({"id": mid, **m})
+        out.append({"id": mid, "name": m["name"], "size": m["size"]})
     return jsonify(out)
 
 
@@ -749,14 +777,8 @@ def voices():
 def model_status(model_id):
     if model_id not in MODELS:
         return jsonify({"error": "Unknown model"}), 404
-    repo = MODELS[model_id]["repo"]
-    cached = try_to_load_from_cache(repo, "config.json")
-    is_cached = cached is not None and isinstance(cached, str)
-
-    files = []
-    if is_cached:
-        files = get_model_files(repo)
-    return jsonify({"model_id": model_id, "cached": is_cached, "files": files})
+    cached = _model_files_present()
+    return jsonify({"model_id": model_id, "cached": cached})
 
 
 # --- Download model with SSE progress ---
@@ -765,29 +787,25 @@ def download_model(model_id):
     if model_id not in MODELS:
         return jsonify({"error": "Unknown model"}), 404
 
-    repo = MODELS[model_id]["repo"]
+    model_cfg = MODELS[model_id]
 
-    def _download_file(repo, filename, result):
-        """Run hf_hub_download in a thread, storing result or exception."""
-        try:
-            path = hf_hub_download(
-                repo_id=repo, filename=filename, tqdm_class=SSEProgressCapture
-            )
-            result["path"] = path
-        except Exception as e:
-            logger.error("Download failed for {}: {}", filename, e)
-            result["error"] = e
-
-    def _stream_download(repo, filename, q):
+    def _stream_download(url, dest, q, label):
         """Start download in thread, yield SSE events as they arrive."""
         result = {}
-        t = threading.Thread(target=_download_file, args=(repo, filename, result))
+
+        def _run():
+            try:
+                _download_file_with_progress(url, dest, q, label)
+            except Exception as e:
+                logger.error("Download failed for {}: {}", label, e)
+                result["error"] = e
+
+        t = threading.Thread(target=_run)
         t.start()
         while t.is_alive():
             t.join(timeout=0.15)
             while not q.empty():
                 yield f"data: {json.dumps(q.get())}\n\n"
-        # Drain remaining events
         while not q.empty():
             yield f"data: {json.dumps(q.get())}\n\n"
         if "error" in result:
@@ -798,41 +816,42 @@ def download_model(model_id):
         yield f"data: {json.dumps({'phase': 'checking', 'model': model_id})}\n\n"
 
         try:
-            SSEProgressCapture.progress_queue = q
+            onnx_path = os.path.join(MODELS_DIR, model_cfg["onnx_file"])
+            voices_path = os.path.join(MODELS_DIR, model_cfg["voices_file"])
 
-            # Step 1: download config.json
-            for event in _stream_download(repo, "config.json", q):
-                yield event
+            # Step 1: download ONNX model if not present
+            if not os.path.isfile(onnx_path):
+                for event in _stream_download(model_cfg["onnx_url"], onnx_path, q, model_cfg["onnx_file"]):
+                    yield event
 
-            config_path = try_to_load_from_cache(repo, "config.json")
-            if not isinstance(config_path, str):
-                raise RuntimeError("Failed to download config.json")
+            # Step 2: download voices if not present
+            if not os.path.isfile(voices_path):
+                for event in _stream_download(model_cfg["voices_url"], voices_path, q, model_cfg["voices_file"]):
+                    yield event
 
-            # Step 2: read config to get model_file and voices filenames
-            with open(config_path, "r") as f:
-                cfg = json.load(f)
-            model_file = cfg["model_file"]
-            voices_file = cfg["voices"]
-
-            # Step 3: download model ONNX
-            for event in _stream_download(repo, model_file, q):
-                yield event
-
-            # Step 4: download voices
-            for event in _stream_download(repo, voices_file, q):
-                yield event
-
-            SSEProgressCapture.progress_queue = None
-
-            # Step 5: load model into memory
+            # Step 3: load model into memory (in background thread to keep SSE alive)
             yield f"data: {json.dumps({'phase': 'loading', 'message': 'Loading model...'})}\n\n"
-            load_model(model_id)
+            load_result = {}
+
+            def _load():
+                try:
+                    load_model()
+                except Exception as e:
+                    load_result["error"] = e
+
+            t = threading.Thread(target=_load)
+            t.start()
+            while t.is_alive():
+                t.join(timeout=1.0)
+                # Send keepalive to prevent connection timeout
+                yield f"data: {json.dumps({'phase': 'loading', 'message': 'Loading model...'})}\n\n"
+            if "error" in load_result:
+                raise load_result["error"]
 
             yield f"data: {json.dumps({'phase': 'ready', 'message': 'Model ready'})}\n\n"
 
         except Exception as e:
-            logger.exception("Model download/load stream failed")
-            SSEProgressCapture.progress_queue = None
+            logger.exception("Model download/load failed")
             yield f"data: {json.dumps({'phase': 'error', 'message': str(e)})}\n\n"
 
     return Response(
@@ -848,15 +867,15 @@ def download_model(model_id):
 
 # --- Chunked generation background worker ---
 
-def _background_chunked_generate(job_id, model_id, voice, sentences, speed,
+def _background_chunked_generate(job_id, voice, sentences, speed,
                                   max_silence_ms, prompt, basename):
     """Generate audio for each sentence chunk, concatenate, loudnorm, and save."""
     with generation_jobs_lock:
         job = generation_jobs[job_id]
     q = job["queue"]
     try:
-        m = load_model(model_id)
-        inner = m.model  # KittenTTS_1_Onnx instance
+        kokoro = load_model()
+        lang = _voice_to_lang(voice)
 
         audio_chunks = []
         total = len(sentences)
@@ -873,14 +892,9 @@ def _background_chunked_generate(job_id, model_id, voice, sentences, speed,
             q.put({"phase": "generating", "chunk": i + 1, "total": total,
                     "sentence": block})
 
-            # Wrap in brackets for TTS pacing and preprocess
-            bracketed = f"[{block}]"
-            processed = inner.preprocessor(bracketed)
-            processed = processed.strip()
-
             start = time.perf_counter()
             with generation_inference_lock:
-                chunk_audio = inner.generate_single_chunk(processed, voice=voice, speed=speed)
+                chunk_audio, _sr = kokoro.create(text=block, voice=voice, speed=speed, lang=lang)
             elapsed = time.perf_counter() - start
             total_inference += elapsed
             audio_chunks.append(chunk_audio)
@@ -913,8 +927,8 @@ def _background_chunked_generate(job_id, model_id, voice, sentences, speed,
             "filename": basename + ".wav",
             "folder": basename,
             "prompt": clean_prompt,
-            "model": MODELS[model_id]["repo"],
-            "model_id": model_id,
+            "model": "kokoro-v1.0",
+            "model_id": "kokoro",
             "voice": voice,
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "inference_time": round(total_inference, 3),
@@ -968,8 +982,8 @@ def _cleanup_old_jobs(max_age_s=300):
 @app.route("/api/generate", methods=["POST"])
 def generate():
     data = request.get_json()
-    model_id = data.get("model", "mini")
-    voice = data.get("voice", "Jasper")
+    model_id = data.get("model", "kokoro")
+    voice = data.get("voice", "af_bella")
     prompt = data.get("prompt", "")
     speed = float(data.get("speed", 1.0))
     speed = max(0.5, min(2.0, speed))  # clamp to 0.5–2.0
@@ -989,7 +1003,7 @@ def generate():
             if job.get("status") == "running":
                 return jsonify({"error": "A generation is already in progress. Please wait or abort."}), 429
 
-    m = load_model(model_id)
+    kokoro = load_model()
     logger.info("Generate  \033[1m{}\033[0m | {} | {} chars", model_id, voice, len(prompt))
 
     # If text is already bracket-formatted [block1]\n\n[block2], use those blocks directly
@@ -1023,7 +1037,7 @@ def generate():
             }
         t = threading.Thread(
             target=_background_chunked_generate,
-            args=(job_id, model_id, voice, blocks, speed,
+            args=(job_id, voice, blocks, speed,
                   max_silence_ms, prompt, basename),
             daemon=True,
         )
@@ -1037,13 +1051,12 @@ def generate():
 
     # --- Single block: synchronous fast path ---
     _cleanup_old_jobs()
-    # Wrap in brackets for TTS pacing
     single_block = blocks[0] if blocks else tts_prompt
-    tts_input = f"[{single_block}]"
+    lang = _voice_to_lang(voice)
     start = time.perf_counter()
     try:
         with generation_inference_lock:
-            audio = m.generate(tts_input, voice=voice, speed=speed)
+            audio, _sr = kokoro.create(text=single_block, voice=voice, speed=speed, lang=lang)
     except Exception as e:
         logger.exception("TTS inference failed")
         return jsonify({"error": f"Generation failed: {e}"}), 500
@@ -1068,8 +1081,8 @@ def generate():
         "filename": wav_name,
         "folder": basename,
         "prompt": clean_prompt,
-        "model": MODELS[model_id]["repo"],
-        "model_id": model_id,
+        "model": "kokoro-v1.0",
+        "model_id": "kokoro",
         "voice": voice,
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "inference_time": round(inference_time, 3),
@@ -1655,7 +1668,7 @@ def _run_alignment(wav_path, prompt_text):
         audio, sr = sf.read(wav_path, dtype="float32")
         if audio.ndim > 1:
             audio = audio.mean(axis=1)
-        # Whisper expects 16kHz — resample if needed (KittenTTS outputs 24kHz)
+        # Whisper expects 16kHz — resample if needed (Kokoro outputs 24kHz)
         if sr != 16000:
             target_len = int(len(audio) * 16000 / sr)
             audio = np.interp(
@@ -2258,7 +2271,7 @@ def serve_audio(filename):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="KittenTTS Studio Backend")
+    parser = argparse.ArgumentParser(description="Kokoro TTS Studio Backend")
     parser.add_argument("--port", type=int, default=0, help="Port to listen on")
     args = parser.parse_args()
 
@@ -2267,11 +2280,10 @@ if __name__ == "__main__":
     # Startup banner (ASCII-safe for Windows cp1252 console)
     print()
     print("  \033[96m+------------------------------------------+\033[0m")
-    print("  \033[96m|\033[0m  \033[1mKittenTTS Studio\033[0m                       \033[96m|\033[0m")
+    print("  \033[96m|\033[0m  \033[1mKokoro TTS Studio\033[0m                      \033[96m|\033[0m")
     print("  \033[96m|\033[0m                                          \033[96m|\033[0m")
     print(f"  \033[96m|\033[0m  \033[92m>\033[0m  http://localhost:{port:<24}\033[96m|\033[0m")
-    print(f"  \033[96m|\033[0m  \033[90m-\033[0m  Models:  {len(MODELS)} available               \033[96m|\033[0m")
-    print(f"  \033[96m|\033[0m  \033[90m-\033[0m  Voices:  {len(VOICES)} available               \033[96m|\033[0m")
+    print(f"  \033[96m|\033[0m  \033[90m-\033[0m  Voices:  {len(VOICES):<2} available              \033[96m|\033[0m")
     print("  \033[96m+------------------------------------------+\033[0m")
     print()
 

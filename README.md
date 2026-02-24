@@ -1,17 +1,16 @@
-# KittenTTS Studio
+# Kokoro TTS Studio
 
-A web studio for [KittenTTS](https://github.com/KittenML/KittenTTS) -- ultra-lightweight open-source text-to-speech. Generate realistic speech from text in your browser, no GPU required.
+A web studio for [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) -- high-quality open-source text-to-speech with 50+ multilingual voices. Generate realistic speech from text in your browser, no GPU required.
 
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
-![KittenTTS 0.8](https://img.shields.io/badge/kittentts-0.8.0-coral)
+![kokoro-onnx](https://img.shields.io/badge/kokoro--onnx-v1.0-coral)
 ![Flask](https://img.shields.io/badge/flask-backend-teal)
 
 ## Features
 
 - **Browser-based UI** -- dark-themed single-page app served by Flask, no build step
-- **5 models** -- Mini (80M), Micro (40M), Nano, Nano INT8, Nano FP32
-- **8 voices** -- Bella, Jasper, Luna, Bruno, Rosie, Hugo, Kiki, Leo
-- **Real-time download progress** -- SSE streams per-file progress when fetching models from HuggingFace Hub
+- **50+ multilingual voices** -- American/British English, Japanese, Chinese, Spanish, French, Hindi, Italian, Portuguese
+- **Real-time download progress** -- SSE streams per-file progress when fetching model from GitHub Releases
 - **Breathing-block chunking** -- long texts split into 150-200 char blocks with merge logic for natural pacing
 - **Async generation with abort** -- chunked generation runs in background threads; cancel anytime
 - **Audio enhancement** -- LavaSR upscaling from 24kHz to 48kHz
@@ -70,9 +69,9 @@ Then open `http://localhost:5000`.
 Python dependencies:
 
 ```
-kittentts==0.8.0   (pulls numpy, soundfile, onnxruntime, spacy, torch, etc.)
+kokoro-onnx             (pulls onnxruntime, numpy, soundfile, etc.)
 flask, flask-cors
-loguru                 (structured logging with rotation)
+loguru                  (structured logging with rotation)
 openai-whisper, stable-ts   (forced alignment / karaoke)
 LavaSR                      (audio enhancement)
 num2words                   (text normalization)
@@ -83,7 +82,7 @@ num2words                   (text normalization)
 ```
 User clicks Generate
   |
-  +-- Step 1: Generate audio (KittenTTS) -> WAV + JSON metadata
+  +-- Step 1: Generate audio (Kokoro) -> WAV + JSON metadata
   |     +-- Start alignment thread (stable-ts, parallel)
   |     +-- Start enhancement thread (LavaSR)
   |
@@ -104,14 +103,15 @@ For long texts, the breathing-block chunker splits into 150-200 char blocks befo
 ## Project Structure
 
 ```
-KittenTTS-Studio/
-+-- main.py             # Original CLI script (unchanged)
+KokoroTTS-Studio/
++-- main.py             # Standalone CLI script
 +-- backend.py          # Flask API server (~2,100 lines)
 +-- requirements.txt    # Python dependencies
 +-- setup.bat           # Environment setup (auto-downloads Python 3.12 if needed)
 +-- runner.bat          # One-click launcher with health-check polling
 +-- CLAUDE.md           # AI assistant project brief
 +-- PLAN.md             # Architecture notes and session log
++-- models/             # Kokoro model files (auto-downloaded, gitignored)
 +-- bin/                # Local ffmpeg (optional, gitignored)
 +-- logs/               # Loguru rotating logs (gitignored)
 +-- generated_assets/   # All generated output (gitignored)
@@ -126,61 +126,16 @@ KittenTTS-Studio/
 |   +-- force-alignment/ # Standalone alignment results
 |       +-- TRASH/       # Soft-deleted alignment files
 +-- frontend/
-    +-- index.html      # Single-file UI (~2,700 lines, inline CSS/JS, Tailwind CDN)
+    +-- index.html      # Single-file UI (~2,800 lines, inline CSS/JS, Tailwind CDN)
 ```
 
-## UI Pages
+## Model
 
-| Page | Description |
-|------|-------------|
-| **TTS** | Model selector, voice grid, prompt editor with Format/Copy buttons, 4-step processing stepper, Generate button |
-| **Alignment** | Standalone force alignment: drag-and-drop audio upload, transcript editor, karaoke playback |
-| **Library** | Unified history with filter tabs (All / TTS / Alignment), play/delete/metadata per item |
-| **Settings** | Speed control, silence threshold, feature availability status, About section |
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Serve frontend |
-| `/api/health` | GET | Server status + feature flags (ffmpeg, alignment, enhance, VAD) |
-| `/api/models` | GET | List available models |
-| `/api/voices` | GET | List available voices |
-| `/api/normalize` | POST | Normalize text for TTS (expand numbers, format breathing blocks) |
-| `/api/model-status/<id>` | GET | Check if model is cached |
-| `/api/download-model/<id>` | GET (SSE) | Download model with real-time progress |
-| `/api/generate` | POST | Generate audio from `{model, voice, prompt, speed, max_silence_ms}` |
-| `/api/generate-progress/<job_id>` | GET (SSE) | Stream chunked generation progress |
-| `/api/generate-abort/<job_id>` | POST | Abort in-flight generation |
-| `/api/generation` | GET | List all generated audio metadata |
-| `/api/generation` | DELETE | Delete all files (move to TRASH) |
-| `/api/generation/<file>` | DELETE | Delete single file (move to TRASH) |
-| `/api/generation/<file>/alignment` | GET | Word alignment data (triggers retroactively if needed) |
-| `/api/generation/<file>/enhance-status` | GET | Enhancement status |
-| `/api/generation/<file>/vad-status` | GET | Silence removal + loudnorm status |
-| `/api/generation/<file>/mp3-convert` | GET (SSE) | Convert WAV to MP3 with progress |
-| `/api/generation/<file>/mp3-check` | GET | Check if MP3 exists |
-| `/api/generation/<file>/mp3` | GET | Serve converted MP3 |
-| `/api/generation/alignments` | GET | List all alignment data (TTS + standalone) |
-| `/api/generation/force-alignment` | GET | List standalone force-alignment results |
-| `/api/generation/alignment/<folder>` | DELETE | Soft-delete alignment folder |
-| `/api/force-align` | POST | Standalone force alignment (audio + text upload) |
-| `/api/open-generation-folder` | POST | Open OS file explorer at generation folder |
-| `/generation/<file>` | GET | Serve audio file |
-| `/generation/force-alignment/<file>` | GET | Serve force-alignment audio |
-
-## Models
-
-| ID | Name | Params | Size | Repository |
-|----|------|--------|------|------------|
-| `mini` | Kitten TTS Mini | 80M | 80MB | KittenML/kitten-tts-mini-0.8 |
-| `micro` | Kitten TTS Micro | 40M | 41MB | KittenML/kitten-tts-micro-0.8 |
-| `nano` | Kitten TTS Nano | 15M | 56MB | KittenML/kitten-tts-nano-0.8 |
-| `nano-int8` | Kitten TTS Nano INT8 | 15M | 19MB | KittenML/kitten-tts-nano-0.8-int8 |
-| `nano-fp32` | Kitten TTS Nano FP32 | 15M | ~56MB | KittenML/kitten-tts-nano-0.8-fp32 |
-
-Models are downloaded from HuggingFace Hub on first use and cached locally.
+**Kokoro v1.0** -- 82M parameters, ~373MB total
+- `kokoro-v1.0.onnx` (~326MB) + `voices-v1.0.bin` (~47MB)
+- Auto-downloaded from [GitHub Releases](https://github.com/thewh1teagle/kokoro-onnx/releases) on first use
+- Sample rate: 24,000 Hz
 
 ## Credits
 
-Built on top of [KittenTTS](https://github.com/KittenML/KittenTTS) by KittenML.
+Built on [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) by thewh1teagle, based on [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M).

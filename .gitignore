@@ -7,3 +7,4 @@ generated_assets/
 logs/
 .claude/
 bin/
+models/
