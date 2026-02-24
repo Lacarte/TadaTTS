@@ -1638,7 +1638,7 @@
           <p class="font-mono text-xs" style="color:var(--text-muted)" id="dl-subtitle">Kokoro v1.0 (~373MB)</p>
         </div>
       </div>
-      <div id="dl-files" class="space-y-3"></div>
+      <div id="dl-files" class="space-y-3" style="max-height:240px;overflow-y:auto"></div>
       <button onclick="cancelDownload()" class="mt-5 w-full py-2.5 rounded-lg font-medium text-sm"
         style="border:1.5px solid var(--border);color:var(--text-secondary);background:transparent;cursor:pointer;transition:all 0.2s">
         Cancel Download
@@ -1932,6 +1932,10 @@
               <button onclick="copyPromptPlain()" title="Copy plain text (without brackets)" class="hover-accent"
                 style="padding:2px 8px;border-radius:5px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer">
                 Copy
+              </button>
+              <button onclick="randomStory()" title="Load a random story excerpt" class="hover-accent"
+                style="padding:2px 8px;border-radius:5px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer">
+                &#x1F3B2; Random
               </button>
             </div>
             <div class="flex items-center gap-1" style="color:var(--text-muted)">
@@ -2966,6 +2970,32 @@
       navigator.clipboard.writeText(plain).then(() => toast('Plain text copied')).catch(() => toast('Copy failed', 'error'));
     }
 
+    const RANDOM_STORIES = [
+      `The old lighthouse keeper climbed the spiral staircase one final time. Seventy-three steps — he'd counted them every night for forty years. Tonight the light would go automatic, and the sea would lose its last human guardian. He pressed his palm against the cold glass and watched the beam sweep across black water. Somewhere out there, a fishing boat adjusted course. They'd never know it was his last turn of the lens.`,
+      `She found the letter tucked inside a library book, dated nineteen fifty-two. "If you're reading this," it began, "then the maples outside must be enormous by now." She glanced out the window. The maples were enormous. She kept reading. "I buried something beneath the tallest one. Something that mattered to me once. I hope it matters to you too." She closed the book, grabbed her coat, and walked outside with a borrowed shovel.`,
+      `The robot had been designed to sort mail, but somewhere between firmware update seven and firmware update eight, it developed a fondness for poetry. It would pause at each envelope, scanning the handwritten addresses with what its engineers could only describe as admiration. "Beautiful ligatures," it murmured one Tuesday, holding a birthday card up to the fluorescent light. The engineers exchanged nervous glances.`,
+      `Rain hammered the tin roof of the roadside diner. A truck driver sat at the counter, stirring coffee he'd never drink. Across from him, a woman in a red coat studied a road atlas, tracing routes with her fingertip. Neither spoke. The waitress refilled his cup anyway. Outside, lightning split the sky and for one bright instant, every puddle in the parking lot turned to silver. The woman folded her map and smiled.`,
+      `The astronaut floated by the observation window, watching Earth turn below. Continents drifted past like slow clouds. She pressed record on her personal log. "Day two hundred and fourteen. I can see a hurricane forming over the Atlantic. From up here it looks like a pinwheel. Beautiful and terrible. I think about my daughter learning to ride her bike in the backyard. I wonder if she looks up at the stars and knows which one is me."`,
+      `The violin had been silent for twenty years, sealed in its velvet-lined case in the attic. When the old man's granddaughter found it, she lifted the bow and drew it across the strings. The sound was thin and ghostly at first, but the wood remembered. By the third note, the kitchen below fell quiet. By the seventh, her grandfather had risen from his chair, tears tracking down weathered cheeks. The violin remembered everything.`,
+      `The detective stared at the chessboard. The suspect sat across from him, calm as still water. "You left one clue," the detective said, moving a pawn. "Just one. But it was enough." The suspect tilted his head. "Enlighten me." The detective placed a photograph on the table — a reflection in a window, barely visible, showing a figure in a doorway. "You forgot about the glass." The suspect's smile faded by exactly one degree.`,
+      `The last bookshop on Elm Street had a cat named Tolstoy and a policy of lending books on the honor system. No cards, no due dates. Just a handwritten note on the door: "Take what you need. Return when you're ready." Most people returned their books. Some left new ones. By December, the shelves held twice as many titles as they had in spring. The owner didn't question it. She just made more tea and added another shelf.`,
+      `The ship's captain spoke into the radio one final time. "This is the Aurora, signing off after thirty years of service. She's carried cargo to fourteen countries, weathered nine storms, and never once let her crew down." He paused, running his hand along the bridge console. "They'll scrap her hull and melt her steel. But steel doesn't forget the shape of a ship. Somewhere in a bridge or a building, she'll keep standing."`,
+      `The garden had been abandoned for decades, but it refused to die. Roses climbed the iron gate, their thorns locking it shut. Ivy covered the stone walls like a second skin. And at the center, where a fountain had once stood, a single apple tree grew crooked and wild, its branches heavy with fruit that no one picked. Birds came and went. Seasons turned. The garden kept its own time, answering to no one.`,
+      `The pianist's hands trembled above the keys. The concert hall held two thousand people, and every one of them was silent. She closed her eyes and thought of her teacher — a quiet woman who smelled of lavender and never raised her voice. "Don't play for them," the teacher had said. "Play for the version of yourself who needed music most." Her fingers found the first chord. The trembling stopped. The music began.`,
+      `The deep-sea diver descended past the point where sunlight surrenders. Her headlamp cut a lonely cone through absolute darkness. At three hundred meters, something glinted. Not metal — something organic, pulsing with its own pale blue luminescence. A jellyfish the size of a cathedral ceiling drifted past, trailing tendrils like curtains of light. She hung motionless in the water, breathing slowly, watching a creature that had never seen a human and never would again.`,
+    ];
+    let _lastStoryIdx = -1;
+    function randomStory() {
+      let idx;
+      do { idx = Math.floor(Math.random() * RANDOM_STORIES.length); } while (idx === _lastStoryIdx && RANDOM_STORIES.length > 1);
+      _lastStoryIdx = idx;
+      const ta = $('#prompt-input');
+      ta.value = RANDOM_STORIES[idx];
+      ta.dispatchEvent(new Event('input'));
+      ta.focus();
+      toast('Random story loaded');
+    }
+
     // ======================================================================
     // Model Select
     // ======================================================================
@@ -3033,6 +3063,22 @@
     function hideDownloadModal() {
       $('#download-modal').classList.add('hidden');
       $('#download-modal').style.display = '';
+    }
+    function updateDownloadStatus(label, detail) {
+      let el = document.getElementById('dl-f-status');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'dl-f-status';
+        el.style.cssText = 'padding:12px;border-radius:8px;background:var(--bg-darkest);text-align:center;';
+        el.innerHTML = `<span class="dl-status-label" style="font-size:12px;font-weight:500;color:var(--text)"></span><p class="dl-status-detail font-mono" style="font-size:10px;color:var(--text-muted);margin-top:4px"></p>`;
+        $('#dl-files').appendChild(el);
+      }
+      el.querySelector('.dl-status-label').textContent = label;
+      el.querySelector('.dl-status-detail').textContent = detail;
+    }
+    function removeDownloadStatus() {
+      const el = document.getElementById('dl-f-status');
+      if (el) el.remove();
     }
     function updateDownloadFile(filename, progress, detail) {
       let el = document.getElementById('dl-f-' + CSS.escape(filename));
@@ -3277,9 +3323,9 @@
         STATE.downloadEventSource = es;
         es.onmessage = ev => {
           const d = JSON.parse(ev.data);
-          if (d.phase === 'checking') updateDownloadFile('Checking cache...', 0, 'Please wait');
-          else if (d.phase === 'downloading') { const det = d.progress >= 100 ? `Done ${d.size} @ ${d.speed}` : `${d.downloaded_mb}MB / ${d.total_mb}MB @ ${d.speed}`; updateDownloadFile(d.file, d.progress, det); }
-          else if (d.phase === 'loading') updateDownloadFile('Loading model...', 100, 'Initializing ONNX runtime');
+          if (d.phase === 'checking') updateDownloadStatus('Checking cache...', 'Please wait');
+          else if (d.phase === 'downloading') { removeDownloadStatus(); const det = d.progress >= 100 ? `Done ${d.size} @ ${d.speed}` : `${d.downloaded_mb}MB / ${d.total_mb}MB @ ${d.speed}`; updateDownloadFile(d.file, d.progress, det); }
+          else if (d.phase === 'loading') { removeDownloadStatus(); updateDownloadStatus('Loading model...', 'Initializing ONNX runtime'); }
           else if (d.phase === 'ready') { es.close(); STATE.downloadEventSource = null; hideDownloadModal(); toast('Model ready!'); resolve(); }
           else if (d.phase === 'error') { es.close(); STATE.downloadEventSource = null; hideDownloadModal(); reject(new Error(d.message || 'Download failed')); }
         };
