@@ -5,7 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kokoro TTS Studio</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230f1520'/><circle cx='16' cy='13' r='5' fill='none' stroke='%234ECDC4' stroke-width='2'/><path d='M8 13v2a8 8 0 0016 0v-2' fill='none' stroke='%234ECDC4' stroke-width='2' stroke-linecap='round'/><line x1='16' y1='23' x2='16' y2='27' stroke='%234ECDC4' stroke-width='2' stroke-linecap='round'/><line x1='12' y1='27' x2='20' y2='27' stroke='%234ECDC4' stroke-width='2' stroke-linecap='round'/></svg>">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230f1520'/><circle cx='16' cy='13' r='5' fill='none' stroke='%234ECDC4' stroke-width='2'/><path d='M8 13v2a8 8 0 0016 0v-2' fill='none' stroke='%234ECDC4' stroke-width='2' stroke-linecap='round'/><line x1='16' y1='23' x2='16' y2='27' stroke='%234ECDC4' stroke-width='2' stroke-linecap='round'/><line x1='12' y1='27' x2='20' y2='27' stroke='%234ECDC4' stroke-width='2' stroke-linecap='round'/></svg>">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -891,7 +892,8 @@
 
     .hist-item.expanded {
       background-color: #0d131d;
-      border: 1px solid #394a60;
+      border: 2px solid #212f42;
+
     }
 
     .hist-item::before {
@@ -1883,8 +1885,7 @@
           <!-- Voice / Voice Blend Tabs -->
           <div id="voice-tabs" style="display:flex;gap:0;margin-bottom:14px;border-radius:8px;
                    border:1.5px solid var(--border);overflow:hidden;background:var(--bg-darkest)">
-            <button class="voice-tab active" data-voice-tab="voice" onclick="switchVoiceTab('voice')"
-              style="flex:1;padding:9px 0;font-size:11px;font-weight:700;font-family:inherit;
+            <button class="voice-tab active" data-voice-tab="voice" onclick="switchVoiceTab('voice')" style="flex:1;padding:9px 0;font-size:11px;font-weight:700;font-family:inherit;
                      letter-spacing:0.08em;text-transform:uppercase;border:none;cursor:pointer;
                      transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px">
               <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -1894,8 +1895,7 @@
               </svg>
               Voice
             </button>
-            <button class="voice-tab" data-voice-tab="blend" onclick="switchVoiceTab('blend')"
-              style="flex:1;padding:9px 0;font-size:11px;font-weight:700;font-family:inherit;
+            <button class="voice-tab" data-voice-tab="blend" onclick="switchVoiceTab('blend')" style="flex:1;padding:9px 0;font-size:11px;font-weight:700;font-family:inherit;
                      letter-spacing:0.08em;text-transform:uppercase;border:none;cursor:pointer;
                      transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px">
               <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
