@@ -1253,25 +1253,54 @@ def generate():
     tada = load_model(model_id)
     logger.info("Generate  \033[1m{}\033[0m | {} | {} chars", model_id, voice_name, len(prompt))
 
-    # Clean the prompt text (strip markdown, URLs, brackets, whitespace)
+    # If text is already bracket-formatted [block1]\n\n[block2], use those blocks directly
     pre_blocks = re.findall(r'\[([^\[\]]+)\]', prompt)
-    if pre_blocks:
-        # Strip brackets, join all blocks into one continuous text
-        cleaned_parts = []
+    if pre_blocks and len(pre_blocks) >= 2:
+        # Already formatted — clean each block individually (strip markdown/URLs, NOT brackets)
+        blocks = []
         for b in pre_blocks:
             cleaned = re.sub(r"[*_#`~]", "", b)
             cleaned = re.sub(r"https?://\S+", "link", cleaned)
             cleaned = re.sub(r"\s+", " ", cleaned).strip()
             if cleaned:
-                cleaned_parts.append(cleaned)
-        tts_prompt = " ".join(cleaned_parts)
+                blocks.append(cleaned)
+        tts_prompt = " ".join(blocks)
     else:
         tts_prompt = clean_for_tts(prompt)
+        blocks = tts_breathing_blocks(tts_prompt)
 
-    # --- Send the whole text as one block to TADA (no chunk splitting) ---
+    # --- Multi-block: chunked background generation with SSE progress ---
+    if len(blocks) > 1:
+        _cleanup_old_jobs()
+        job_id = uuid.uuid4().hex[:12]
+        basename = generate_filename(prompt)
+        with generation_jobs_lock:
+            generation_jobs[job_id] = {
+                "queue": Queue(),
+                "status": "running",
+                "metadata": None,
+                "created": time.time(),
+                "abort": False,
+            }
+        t = threading.Thread(
+            target=_background_chunked_generate,
+            args=(job_id, voice_id, voice_prompt, blocks, speed,
+                  max_silence_ms, prompt, basename, model_id, voice_name,
+                  skip_enhance, skip_clean),
+            daemon=True,
+        )
+        t.start()
+        return jsonify({
+            "job_id": job_id,
+            "status": "chunking",
+            "total_chunks": len(blocks),
+            "sentences": blocks,
+        }), 202
+
+    # --- Single block: synchronous fast path ---
     import torch
     _cleanup_old_jobs()
-    single_block = tts_prompt
+    single_block = blocks[0] if blocks else tts_prompt
     start = time.perf_counter()
     try:
         with generation_inference_lock:
@@ -1442,6 +1471,9 @@ def stream_audio():
 
     tada = load_model(model_id)
     tts_prompt = clean_for_tts(prompt)
+    blocks = tts_breathing_blocks(tts_prompt)
+    if not blocks:
+        blocks = [tts_prompt]
 
     logger.info("Stream  \033[1m{}\033[0m | {} | {} chars", model_id, voice_id, len(prompt))
 
@@ -1451,10 +1483,11 @@ def stream_audio():
         import torch
         _stream_active.set()
         try:
-            with generation_inference_lock:
-                output = tada.generate(prompt=voice_prompt, text=tts_prompt)
-                audio = output.audio[0].cpu().numpy().astype(np.float32)
-            q.put(("audio", audio, 24000))
+            for block in blocks:
+                with generation_inference_lock:
+                    output = tada.generate(prompt=voice_prompt, text=block)
+                    audio = output.audio[0].cpu().numpy().astype(np.float32)
+                q.put(("audio", audio, 24000))
             q.put(("done", None, None))
         except Exception as exc:
             logger.exception("Stream generation failed")
