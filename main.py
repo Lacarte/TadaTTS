@@ -1,37 +1,50 @@
-from kokoro_onnx import Kokoro
+import torch
+import torchaudio
 import soundfile as sf
 import time
 
-kokoro = Kokoro("models/kokoro-v1.0.onnx", "models/voices-v1.0.bin")
+from tada.modules.tada import TadaForCausalLM
+from tada.modules.encoder import Encoder
 
-prompt = """
+device = "cuda" if torch.cuda.is_available() else "cpu"
+dtype = torch.bfloat16 if device == "cuda" else torch.float32
+
+print(f"Device: {device}")
+print("Loading encoder...")
+encoder = Encoder.from_pretrained("HumeAI/tada-codec", subfolder="encoder").to(device)
+print("Loading TADA-1B model...")
+model = TadaForCausalLM.from_pretrained("HumeAI/tada-1b", torch_dtype=dtype).to(device)
+
+# Load a reference audio for voice cloning
+ref_audio_path = "reference.wav"
+print(f"Loading reference audio: {ref_audio_path}")
+audio, sample_rate = torchaudio.load(ref_audio_path)
+audio = audio.to(device)
+
+ref_transcript = "This is a sample reference transcript."
+
+prompt = encoder(audio, text=[ref_transcript], sample_rate=sample_rate)
+
+text_to_speak = """
 The reports of my death are greatly exaggerated, but the reports of AI taking all our jobs... are somehow even more so.
 """
 
-# List available voices: print(kokoro.get_voices())
-
-voice = 'af_bella'
-
-# Token approximation (words * 1.3 is a rough heuristic)
-words = len(prompt.split())
-approx_tokens = int(words * 1.3)
-
-print(f"Prompt      : {prompt.strip()}")
-print(f"Word count  : {words}")
-print(f"~Tokens     : {approx_tokens}")
-print(f"Voice       : {voice}")
-print(f"Generating...")
+print(f"Text: {text_to_speak.strip()}")
+print("Generating...")
 
 start = time.perf_counter()
-audio, sr = kokoro.create(prompt, voice=voice, speed=1.0, lang="en-us")
+output = model.generate(prompt=prompt, text=text_to_speak.strip())
 end = time.perf_counter()
 
-duration_generated = len(audio) / sr  # audio length in seconds
 inference_time = end - start
-rtf = inference_time / duration_generated  # real-time factor
+generated_audio = output.audio[0].cpu()
+duration = generated_audio.shape[-1] / 24000
+rtf = inference_time / duration
 
 print(f"\n--- Timing ---")
 print(f"Inference time : {inference_time:.3f}s")
+print(f"Audio duration : {duration:.2f}s")
+print(f"RTF            : {rtf:.3f}")
 
-# Save the audio
-sf.write('output.wav', audio, sr)
+torchaudio.save("output.wav", generated_audio.unsqueeze(0), 24000)
+print("Saved to output.wav")

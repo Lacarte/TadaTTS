@@ -1,141 +1,107 @@
-# Kokoro TTS Studio
+# TADA TTS Studio
 
-A web studio for [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) -- high-quality open-source text-to-speech with 50+ multilingual voices. Generate realistic speech from text in your browser, no GPU required.
+A web studio for [TADA TTS](https://github.com/HumeAI/tada) -- high-quality open-source text-to-speech with voice cloning. Clone any voice from a reference audio and generate natural speech in your browser.
 
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
-![kokoro-onnx](https://img.shields.io/badge/kokoro--onnx-v1.0-coral)
+![TADA TTS](https://img.shields.io/badge/TADA-1B%20%7C%203B-coral)
 ![Flask](https://img.shields.io/badge/flask-backend-teal)
 
 ## Features
 
+- **Voice cloning** -- upload a reference audio (5-30s) to clone any voice
+- **Two models** -- TADA-1B (English, ~4GB) and TADA-3B (10 languages, ~9GB)
+- **CPU/GPU support** -- toggle between CPU and CUDA in the UI
 - **Browser-based UI** -- dark-themed single-page app served by Flask, no build step
-- **50+ multilingual voices** -- American/British English, Japanese, Chinese, Spanish, French, Hindi, Italian, Portuguese
-- **Real-time download progress** -- SSE streams per-file progress when fetching model from GitHub Releases
-- **Breathing-block chunking** -- long texts split into 150-200 char blocks with merge logic for natural pacing
+- **Real-time download progress** -- SSE streams progress when fetching models from HuggingFace
+- **Breathing-block chunking** -- long texts split into 150-200 char blocks for natural pacing
 - **Async generation with abort** -- chunked generation runs in background threads; cancel anytime
 - **Audio enhancement** -- LavaSR upscaling from 24kHz to 48kHz
 - **Silence removal** -- Silero VAD trims dead air with configurable threshold (0.2s-1.0s)
 - **Loudness normalization** -- ffmpeg loudnorm for consistent volume
-- **Karaoke word highlighting** -- stable-ts forced alignment with real-time word tracking and click-to-seek
-- **Text normalization** -- expands numbers, currency, abbreviations, dates, and symbols; auto-formats into breathing blocks
-- **Speed control** -- adjustable playback from 0.5x to 2.0x (persisted)
-- **MP3 export** -- WAV to MP3 conversion with live SSE progress
-- **3-version player** -- switch between Original, Enhanced, and Cleaned audio; preserves seek position
+- **Karaoke word highlighting** -- stable-ts forced alignment with real-time word tracking
+- **Text normalization** -- expands numbers, currency, abbreviations, dates, symbols
+- **Speed control** -- adjustable from 0.5x to 2.0x (persisted)
+- **MP3 export** -- WAV to MP3 conversion with live progress
+- **3-version player** -- Original, Enhanced, and Cleaned audio
 - **Standalone force alignment** -- upload any audio + transcript for word-level timestamps
-- **Unified library** -- TTS and alignment history merged with type tags and filter tabs
-- **Per-generation subfolders** -- each job saved in its own directory under `generated_assets/tts/`
-- **Soft delete** -- files moved to TRASH folder, with delete-all option and confirmation modal
-- **Sidebar navigation** -- collapsible sidebar with 4 pages (TTS, Alignment, Library, Settings)
+- **Unified library** -- TTS and alignment history with filter tabs
+- **Soft delete** -- files moved to TRASH folder
 - **Dark theme** -- always-dark UI with navy/teal/coral palette
-- **Keyboard shortcut** -- Ctrl+Enter to generate
-- **Open folder** -- reveal generation output in OS file explorer
-- **One-click startup** -- `runner.bat` finds a free port, starts the server, opens the browser
 
-## Quick Start (Windows)
+## Quick Start
 
-### 1. Setup
-
-```
+```bash
+# 1. Setup (creates venv, installs dependencies)
 setup.bat
-```
 
-Creates a Python 3.12 venv and installs dependencies. If Python 3.12 isn't found on your system, the script downloads and installs it locally.
-
-### 2. Run
-
-```
+# 2. Run (starts server, opens browser)
 runner.bat
 ```
 
-Starts the backend on an available port (default 5000), waits for the health check to pass, then opens your browser.
-
-### Manual Start
-
+Or manually:
 ```bash
-# activate venv
+python -m venv venv
 venv\Scripts\activate
-
-# run the server
-python backend.py --port 5000
+pip install -r requirements.txt
+python backend.py
 ```
 
-Then open `http://localhost:5000`.
+## How It Works
 
-## Requirements
+### Voice Cloning
+1. Upload a reference audio file (WAV, MP3, FLAC, OGG) -- 5-30 seconds recommended
+2. Optionally provide the transcript of the reference audio
+3. The TADA encoder processes the reference to create a voice prompt
+4. Use the voice profile for all future generations
 
-- **Python 3.12**
-- **ffmpeg** (optional, for MP3 conversion and loudnorm) -- place `ffmpeg.exe` in `bin/` or install system-wide
-
-Python dependencies:
-
-```
-kokoro-onnx             (pulls onnxruntime, numpy, soundfile, etc.)
-flask, flask-cors
-loguru                  (structured logging with rotation)
-openai-whisper, stable-ts   (forced alignment / karaoke)
-LavaSR                      (audio enhancement)
-num2words                   (text normalization)
-```
-
-## Processing Pipeline
+### Generation Pipeline
 
 ```
-User clicks Generate
-  |
-  +-- Step 1: Generate audio (Kokoro) -> WAV + JSON metadata
-  |     +-- Start alignment thread (stable-ts, parallel)
-  |     +-- Start enhancement thread (LavaSR)
-  |
-  +-- Step 2: Enhancement (LavaSR) -> 48kHz upscaled WAV
-  |     +-- Chains into VAD when done
-  |
-  +-- Step 3: Silence Removal (Silero VAD) -> cleaned WAV
-  |     +-- Uses enhanced audio if available, preserves gaps <= max_silence_ms
-  |
-  +-- Step 4: Loudnorm (ffmpeg) -> overwrites cleaned WAV in-place
-  |     +-- Runs inside VAD background thread after silence removal
-  |
-  +-- Step 5: MP3 Conversion (ffmpeg, frontend-driven) -> final MP3
+Step 1: Generate audio (TADA) -> WAV + JSON metadata
+Step 2: Enhance (LavaSR) -> 48kHz upscaled WAV
+Step 3: Clean (Silero VAD) -> silence removed
+Step 4: Normalize (ffmpeg loudnorm) -> consistent volume
+Step 5: Convert (ffmpeg) -> MP3
 ```
 
-For long texts, the breathing-block chunker splits into 150-200 char blocks before generation, then crossfade-concatenates the resulting audio chunks.
+Each step is optional and runs in the background. Steps 2-5 chain automatically.
 
 ## Project Structure
 
 ```
-KokoroTTS-Studio/
-+-- main.py             # Standalone CLI script
-+-- backend.py          # Flask API server (~2,100 lines)
-+-- requirements.txt    # Python dependencies
-+-- setup.bat           # Environment setup (auto-downloads Python 3.12 if needed)
-+-- runner.bat          # One-click launcher with health-check polling
-+-- CLAUDE.md           # AI assistant project brief
-+-- PLAN.md             # Architecture notes and session log
-+-- models/             # Kokoro model files (auto-downloaded, gitignored)
-+-- bin/                # Local ffmpeg (optional, gitignored)
-+-- logs/               # Loguru rotating logs (gitignored)
-+-- generated_assets/   # All generated output (gitignored)
-|   +-- tts/            # Per-generation subfolders
-|   |   +-- some-text_20260221_143052/
-|   |   |   +-- some-text_20260221_143052.wav          # Original (24kHz)
-|   |   |   +-- some-text_20260221_143052.json         # Metadata
-|   |   |   +-- some-text_20260221_143052_enhanced.wav  # Enhanced (48kHz)
-|   |   |   +-- some-text_20260221_143052_cleaned.wav   # Silence removed + loudnorm
-|   |   |   +-- some-text_20260221_143052_cleaned.mp3   # MP3 of cleaned
-|   |   +-- TRASH/      # Soft-deleted TTS files
-|   +-- force-alignment/ # Standalone alignment results
-|       +-- TRASH/       # Soft-deleted alignment files
+TadaTTS-Studio/
++-- backend.py          # Flask API server
 +-- frontend/
-    +-- index.html      # Single-file UI (~2,800 lines, inline CSS/JS, Tailwind CDN)
+|   +-- index.html      # Single-file UI (inline CSS/JS, Tailwind CDN)
++-- voices/             # Voice profiles (reference audio + metadata)
++-- generated_assets/   # All generated output
++-- models/             # (gitignored) cached model files
++-- logs/               # (gitignored) rotating log files
++-- bin/                # (optional) local ffmpeg binary
 ```
 
-## Model
+## Models
 
-**Kokoro v1.0** -- 82M parameters, ~373MB total
-- `kokoro-v1.0.onnx` (~326MB) + `voices-v1.0.bin` (~47MB)
-- Auto-downloaded from [GitHub Releases](https://github.com/thewh1teagle/kokoro-onnx/releases) on first use
-- Sample rate: 24,000 Hz
+**TADA-1B** -- ~2B parameters, English only, ~4GB
+- HuggingFace: `HumeAI/tada-1b`
+
+**TADA-3B Multilingual** -- ~4B parameters, 10 languages, ~9GB
+- HuggingFace: `HumeAI/tada-3b-ml`
+- Languages: English, Arabic, Chinese, German, Spanish, French, Italian, Japanese, Polish, Portuguese
+
+Models auto-download from HuggingFace on first use.
+
+## Dependencies
+
+```
+hume-tada (pulls torch, torchaudio, transformers)
+flask, flask-cors
+loguru
+openai-whisper, stable-ts (word alignment)
+LavaSR (audio enhancement)
+num2words (text normalization)
+```
 
 ## Credits
 
-Built on [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx) by thewh1teagle, based on [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M).
+Built on [TADA TTS](https://github.com/HumeAI/tada) by Hume AI.

@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kokoro TTS Studio</title>
+  <title>TADA TTS Studio</title>
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230f1520'/><circle cx='16' cy='13' r='5' fill='none' stroke='%234ECDC4' stroke-width='2'/><path d='M8 13v2a8 8 0 0016 0v-2' fill='none' stroke='%234ECDC4' stroke-width='2' stroke-linecap='round'/><line x1='16' y1='23' x2='16' y2='27' stroke='%234ECDC4' stroke-width='2' stroke-linecap='round'/><line x1='12' y1='27' x2='20' y2='27' stroke='%234ECDC4' stroke-width='2' stroke-linecap='round'/></svg>">
   <script src="https://cdn.tailwindcss.com"></script>
@@ -1758,7 +1758,7 @@
         </div>
         <div>
           <h3 class="font-display text-lg font-semibold" id="dl-title">Downloading Model</h3>
-          <p class="font-mono text-xs" style="color:var(--text-muted)" id="dl-subtitle">Kokoro v1.0 (~373MB)</p>
+          <p class="font-mono text-xs" style="color:var(--text-muted)" id="dl-subtitle">TADA TTS</p>
         </div>
       </div>
       <div id="dl-files" class="space-y-3" style="max-height:240px;overflow-y:auto"></div>
@@ -1784,7 +1784,7 @@
         </svg>
       </div>
       <div class="brand-text">
-        <h1 class="font-display text-base font-bold tracking-tight" style="color:var(--text);line-height:1.1">Kokoro
+        <h1 class="font-display text-base font-bold tracking-tight" style="color:var(--text);line-height:1.1">TADA
         </h1>
         <p class="text-[9px] font-bold tracking-[0.2em] uppercase" style="color:var(--accent);margin-top:1px">Studio</p>
       </div>
@@ -1899,10 +1899,11 @@
             <div style="position:relative;flex:1">
               <select id="model-select" class="input-field"
                 style="width:100%;padding:11px 14px;padding-right:90px;font-size:13px;font-weight:500">
-                <option value="kokoro">Kokoro v1.0 — 82M</option>
+                <option value="tada-1b">TADA 1B — English</option>
+                <option value="tada-3b">TADA 3B — Multilingual</option>
               </select>
               <span id="model-size" class="font-mono"
-                style="position:absolute;right:32px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:600;color:var(--accent);background:rgba(78,205,196,0.1);padding:2px 7px;border-radius:5px">~373MB</span>
+                style="position:absolute;right:32px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:600;color:var(--accent);background:rgba(78,205,196,0.1);padding:2px 7px;border-radius:5px">~4GB</span>
               <svg
                 style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-muted)"
                 width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -1912,7 +1913,7 @@
             <div style="position:relative;min-width:80px">
               <select id="speed-select" class="input-field"
                 style="width:100%;padding:11px 10px;padding-right:24px;font-size:12px;font-weight:600;font-family:'JetBrains Mono',monospace;text-align:center"
-                onchange="localStorage.setItem('kokoro-speed',this.value)">
+                onchange="localStorage.setItem('tada-speed',this.value)">
               </select>
               <svg
                 style="position:absolute;right:6px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-muted)"
@@ -1923,42 +1924,52 @@
           </div>
         </section>
 
-        <!-- Voices -->
+        <!-- Voice Profiles (Reference Audio for Voice Cloning) -->
         <section class="card p-5 mb-4 reveal" style="animation-delay:0.07s">
-          <!-- Voice / Voice Blend Tabs -->
-          <div id="voice-tabs" style="display:flex;gap:0;margin-bottom:14px;border-radius:8px;
-                   border:1.5px solid var(--border);overflow:hidden;background:var(--bg-darkest)">
-            <button class="voice-tab active" data-voice-tab="voice" onclick="switchVoiceTab('voice')" style="flex:1;padding:9px 0;font-size:11px;font-weight:700;font-family:inherit;
-                     letter-spacing:0.08em;text-transform:uppercase;border:none;cursor:pointer;
-                     transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px">
-              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                viewBox="0 0 24 24">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-              Voice
-            </button>
-            <button class="voice-tab" data-voice-tab="blend" onclick="switchVoiceTab('blend')" style="flex:1;padding:9px 0;font-size:11px;font-weight:700;font-family:inherit;
-                     letter-spacing:0.08em;text-transform:uppercase;border:none;cursor:pointer;
-                     transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:6px">
-              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
-                viewBox="0 0 24 24">
-                <circle cx="6" cy="6" r="3" />
-                <circle cx="18" cy="18" r="3" />
-                <path d="M6 21V9a9 9 0 0 1 9 9" />
-                <path d="M18 3v12a9 9 0 0 1-9-9" />
-              </svg>
-              Voice Blend
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+            <label class="block text-[10px] font-bold uppercase tracking-[0.15em]"
+              style="color:var(--text-muted);margin:0">Voice Profile</label>
+            <button onclick="showVoiceUpload()" class="hover-scale"
+              style="display:flex;align-items:center;gap:4px;padding:5px 10px;border-radius:6px;background:rgba(78,205,196,0.1);border:1px solid rgba(78,205,196,0.2);color:var(--accent);font-size:10px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.2s">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              New Voice
             </button>
           </div>
 
-          <!-- Voice Tab Content -->
-          <div id="voice-tab-content">
-            <div id="lang-tabs" class="flex flex-wrap gap-1.5 mb-3"></div>
-            <div id="voice-grid" class="flex flex-wrap gap-2"></div>
+          <!-- Upload Panel (hidden by default) -->
+          <div id="voice-upload-panel" style="display:none;margin-bottom:14px">
+            <div style="padding:16px;border-radius:10px;border:1.5px dashed var(--border);background:var(--bg-darkest);text-align:center"
+              id="voice-drop-zone">
+              <svg width="24" height="24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" viewBox="0 0 24 24" style="margin:0 auto 8px">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+              <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">Drop reference audio or click to browse</p>
+              <p style="font-size:10px;color:var(--text-muted)">WAV, MP3, FLAC, OGG (5-30s recommended)</p>
+              <input type="file" id="voice-audio-input" accept=".wav,.mp3,.flac,.ogg" style="display:none" onchange="handleVoiceFileSelect(this)">
+              <button onclick="$('#voice-audio-input').click()" style="margin-top:10px;padding:6px 16px;border-radius:6px;background:var(--bg-surface);border:1px solid var(--border);color:var(--text);font-size:11px;font-weight:500;font-family:inherit;cursor:pointer">Browse Files</button>
+            </div>
+            <div id="voice-upload-details" style="display:none;margin-top:10px">
+              <p id="voice-upload-filename" style="font-size:11px;color:var(--accent);margin-bottom:8px"></p>
+              <input type="text" id="voice-name-input" class="input-field" placeholder="Voice name (e.g., My Narrator)" style="width:100%;padding:8px 12px;font-size:12px;margin-bottom:6px">
+              <textarea id="voice-transcript-input" class="input-field" placeholder="Transcript of the reference audio (optional for English, required for other languages)" style="width:100%;padding:8px 12px;font-size:12px;min-height:60px;resize:vertical;margin-bottom:10px"></textarea>
+              <div style="display:flex;gap:8px">
+                <button onclick="uploadVoiceProfile()" style="flex:1;padding:8px;border-radius:6px;background:var(--accent);color:#0a0e13;font-size:12px;font-weight:600;font-family:inherit;border:none;cursor:pointer">Create Voice Profile</button>
+                <button onclick="cancelVoiceUpload()" style="padding:8px 16px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--text-muted);font-size:12px;font-family:inherit;cursor:pointer">Cancel</button>
+              </div>
+            </div>
           </div>
 
-          <!-- Voice Blend Tab Content -->
+          <!-- Voice Profiles List -->
+          <div id="voice-profiles-list" style="display:flex;flex-direction:column;gap:6px">
+            <p id="no-voices-msg" style="text-align:center;color:var(--text-muted);font-size:12px;padding:20px 0">
+              No voice profiles yet. Upload a reference audio to get started.
+            </p>
+          </div>
+
+          <!-- Legacy hidden elements for compatibility -->
+          <div id="voice-tab-content" style="display:none"></div>
           <div id="blend-panel" style="display:none">
             <!-- Voice A / B Selectors -->
             <div style="display:grid;grid-template-columns:1fr 28px 1fr;gap:6px;align-items:end;margin-bottom:14px">
@@ -2319,7 +2330,7 @@
           <div style="position:relative">
             <select id="silence-select" class="input-field"
               style="width:100%;padding:11px 14px;padding-right:32px;font-size:13px;font-weight:500;font-family:'JetBrains Mono',monospace"
-              onchange="localStorage.setItem('kokoro-silence',this.value)" title="Remove silences longer than this">
+              onchange="localStorage.setItem('tada-silence',this.value)" title="Remove silences longer than this">
             </select>
             <svg
               style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-muted)"
@@ -2327,6 +2338,60 @@
               <path d="M1.5 3.5l3.5 3.5 3.5-3.5" />
             </svg>
           </div>
+        </section>
+
+        <!-- Post-Processing Steps -->
+        <section class="card p-5 mb-4">
+          <label class="block text-[10px] font-bold uppercase tracking-[0.15em] mb-2.5"
+            style="color:var(--text-muted)">Post-Processing Pipeline</label>
+          <p class="text-xs mb-3" style="color:var(--text-secondary)">Toggle which steps run after generation. Disabled steps are skipped.</p>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:var(--bg-darkest);cursor:pointer">
+              <input type="checkbox" id="step-enhance-toggle" onchange="toggleStep('enhance', this.checked)"
+                style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+              <div style="flex:1">
+                <span style="font-size:13px;color:var(--text);font-weight:500">Enhance</span>
+                <span class="font-mono" style="font-size:10px;color:var(--text-muted);margin-left:6px">LavaSR 24kHz → 48kHz</span>
+              </div>
+              <span class="font-mono" style="font-size:9px;color:var(--text-muted)">Step 2</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:var(--bg-darkest);cursor:pointer">
+              <input type="checkbox" id="step-clean-toggle" onchange="toggleStep('clean', this.checked)"
+                style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+              <div style="flex:1">
+                <span style="font-size:13px;color:var(--text);font-weight:500">Clean + Normalize</span>
+                <span class="font-mono" style="font-size:10px;color:var(--text-muted);margin-left:6px">Silence removal + loudnorm</span>
+              </div>
+              <span class="font-mono" style="font-size:9px;color:var(--text-muted)">Steps 3-4</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:var(--bg-darkest);cursor:pointer">
+              <input type="checkbox" id="step-mp3-toggle" onchange="toggleStep('mp3', this.checked)"
+                style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+              <div style="flex:1">
+                <span style="font-size:13px;color:var(--text);font-weight:500">MP3 Convert</span>
+                <span class="font-mono" style="font-size:10px;color:var(--text-muted);margin-left:6px">WAV → MP3 export</span>
+              </div>
+              <span class="font-mono" style="font-size:9px;color:var(--text-muted)">Step 5</span>
+            </label>
+          </div>
+        </section>
+
+        <!-- Device Toggle (CPU/GPU) -->
+        <section id="device-section" class="card p-5 mb-4">
+          <label class="block text-[10px] font-bold uppercase tracking-[0.15em] mb-2.5"
+            style="color:var(--text-muted)">Compute Device</label>
+          <p class="text-xs mb-3" style="color:var(--text-secondary)">Choose CPU or GPU for inference. GPU is faster but requires CUDA and sufficient VRAM.</p>
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <button id="device-cpu-btn" onclick="setDevice('cpu')"
+              style="flex:1;padding:10px;border-radius:8px;border:1.5px solid var(--accent);background:rgba(78,205,196,0.06);color:var(--accent);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.2s">
+              CPU
+            </button>
+            <button id="device-gpu-btn" onclick="setDevice('cuda')"
+              style="flex:1;padding:10px;border-radius:8px;border:1.5px solid var(--border);background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.2s">
+              GPU (CUDA)
+            </button>
+          </div>
+          <div id="gpu-info" style="font-size:10px;color:var(--text-muted);font-family:'JetBrains Mono',monospace"></div>
         </section>
 
         <!-- Features Status -->
@@ -2343,12 +2408,14 @@
           <div class="space-y-2">
             <div class="flex justify-between"><span class="text-sm"
                 style="color:var(--text-secondary)">Application</span><span class="font-mono text-sm"
-                style="color:var(--text)">Kokoro TTS Studio</span></div>
+                style="color:var(--text)">TADA TTS Studio</span></div>
             <div class="flex justify-between"><span class="text-sm"
                 style="color:var(--text-secondary)">Engine</span><span class="font-mono text-sm"
-                style="color:var(--text)">kokoro-onnx</span></div>
+                style="color:var(--text)">HumeAI/TADA</span></div>
+            <div class="flex justify-between"><span class="text-sm" style="color:var(--text-secondary)">Models</span><span class="font-mono text-sm" style="color:var(--text)">TADA-1B, TADA-3B-ml</span></div>
             <div class="flex justify-between"><span class="text-sm" style="color:var(--text-secondary)">Sample
                 Rate</span><span class="font-mono text-sm" style="color:var(--text)">24,000 Hz</span></div>
+            <div class="flex justify-between"><span class="text-sm" style="color:var(--text-secondary)">Device</span><span class="font-mono text-sm" id="settings-device" style="color:var(--text)">CPU</span></div>
             <div class="flex justify-between"><span class="text-sm" style="color:var(--text-secondary)">Built
                 by</span><span class="text-sm font-medium" style="color:var(--accent)">Mr. Lacarte</span></div>
           </div>
@@ -2531,10 +2598,10 @@
     }
     function toggleSidebar() {
       document.getElementById('sidebar').classList.toggle('collapsed');
-      localStorage.setItem('kokoro-sidebar', document.getElementById('sidebar').classList.contains('collapsed'));
+      localStorage.setItem('tada-sidebar', document.getElementById('sidebar').classList.contains('collapsed'));
     }
     // Restore sidebar state
-    if (localStorage.getItem('kokoro-sidebar') === 'true') {
+    if (localStorage.getItem('tada-sidebar') === 'true') {
       document.getElementById('sidebar').classList.add('collapsed');
     }
 
@@ -2542,19 +2609,14 @@
     // State
     // ======================================================================
     const STATE = {
-      models: [], voices: [],
-      selectedModel: localStorage.getItem('kokoro-model') || 'kokoro',
-      selectedVoice: localStorage.getItem('kokoro-voice') || 'af_bella',
-      selectedLang: localStorage.getItem('kokoro-lang') || 'top-picks',
-      blendMode: localStorage.getItem('kokoro-blend-mode') === 'true',
-      blendVoiceA: localStorage.getItem('kokoro-blend-a') || 'af_heart',
-      blendVoiceB: localStorage.getItem('kokoro-blend-b') || 'am_adam',
-      blendRatio: parseInt(localStorage.getItem('kokoro-blend-ratio') || '50'),
-      blendMethod: localStorage.getItem('kokoro-blend-method') || 'slerp',
-      blendPickerTarget: null,
+      models: [], voices: [], voiceProfiles: [],
+      selectedModel: localStorage.getItem('tada-model') || 'tada-1b',
+      selectedVoice: localStorage.getItem('tada-voice') || '',
+      device: 'cpu',
+      gpuInfo: null,
       nowPlaying: null, isGenerating: false, history: [],
       dark: true, // Always dark in this design
-      genMode: localStorage.getItem('kokoro-gen-mode') || 'generate',
+      genMode: localStorage.getItem('tada-gen-mode') || 'generate',
       streamAbortController: null, streamAudioCtx: null,
       downloadEventSource: null, chunkEventSource: null, generateAbort: null, eqInterval: null, ffmpeg: false,
       alignment: null, alignmentAvailable: false, alignmentPollTimer: null, activeWordIndex: -1,
@@ -2563,94 +2625,27 @@
       activeVersion: 'original',
       processingStep: 0,
       histFilter: 'all',
+      stepEnhance: localStorage.getItem('tada-step-enhance') !== 'false',
+      stepClean: localStorage.getItem('tada-step-clean') !== 'false',
+      stepMp3: localStorage.getItem('tada-step-mp3') !== 'false',
     };
 
     const $ = s => document.querySelector(s);
     const $$ = s => document.querySelectorAll(s);
-    const MODEL_SIZES = { kokoro: '~373MB' };
-    const LANG_NAMES = {
-      'en-us': 'American English', 'en-gb': 'British English', 'ja': 'Japanese',
-      'zh': 'Chinese', 'es': 'Spanish', 'fr': 'French', 'hi': 'Hindi',
-      'it': 'Italian', 'pt-br': 'Portuguese'
-    };
-    const VOICE_META = {
-      // American Female — coral/pink
-      af_alloy: { g: 'f', hue: '#FF9B9B', lang: 'en-us', name: 'Alloy', desc: 'Neutral, versatile' },
-      af_aoede: { g: 'f', hue: '#FFB5B5', lang: 'en-us', name: 'Aoede', desc: 'Soft, melodic' },
-      af_bella: { g: 'f', hue: '#FF8A8A', lang: 'en-us', name: 'Bella', desc: 'Energetic, engaging' },
-      af_heart: { g: 'f', hue: '#FF7070', lang: 'en-us', name: 'Heart', desc: 'Warm, friendly, natural' },
-      af_jessica: { g: 'f', hue: '#FFA5A5', lang: 'en-us', name: 'Jessica', desc: 'Bright, conversational' },
-      af_kore: { g: 'f', hue: '#FFCECE', lang: 'en-us', name: 'Kore', desc: 'Gentle, soothing' },
-      af_nicole: { g: 'f', hue: '#FF8080', lang: 'en-us', name: 'Nicole', desc: 'Clear, professional' },
-      af_nova: { g: 'f', hue: '#FFD0D0', lang: 'en-us', name: 'Nova', desc: 'Bright, modern' },
-      af_river: { g: 'f', hue: '#FFB0B0', lang: 'en-us', name: 'River', desc: 'Calm, flowing' },
-      af_sarah: { g: 'f', hue: '#FF9595', lang: 'en-us', name: 'Sarah', desc: 'Smooth, balanced' },
-      af_sky: { g: 'f', hue: '#FFBABA', lang: 'en-us', name: 'Sky', desc: 'Light, airy' },
-      // American Male — teal
-      am_adam: { g: 'm', hue: '#6FE3DA', lang: 'en-us', name: 'Adam', desc: 'Warm, approachable' },
-      am_echo: { g: 'm', hue: '#5ED5CC', lang: 'en-us', name: 'Echo', desc: 'Resonant, clear' },
-      am_eric: { g: 'm', hue: '#7EEFEA', lang: 'en-us', name: 'Eric', desc: 'Confident, steady' },
-      am_fenrir: { g: 'm', hue: '#4ECDC4', lang: 'en-us', name: 'Fenrir', desc: 'Bold, dynamic' },
-      am_liam: { g: 'm', hue: '#6DE0D8', lang: 'en-us', name: 'Liam', desc: 'Friendly, casual' },
-      am_michael: { g: 'm', hue: '#8AF0E8', lang: 'en-us', name: 'Michael', desc: 'Deep, authoritative' },
-      am_onyx: { g: 'm', hue: '#5CD8D0', lang: 'en-us', name: 'Onyx', desc: 'Rich, powerful' },
-      am_puck: { g: 'm', hue: '#7AE8E0', lang: 'en-us', name: 'Puck', desc: 'Playful, expressive' },
-      // British Female — purple/lavender
-      bf_alice: { g: 'f', hue: '#C4B5FD', lang: 'en-gb', name: 'Alice', desc: 'Refined, poised' },
-      bf_emma: { g: 'f', hue: '#D4C5FF', lang: 'en-gb', name: 'Emma', desc: 'Elegant, articulate' },
-      bf_isabella: { g: 'f', hue: '#B4A5ED', lang: 'en-gb', name: 'Isabella', desc: 'Graceful, warm' },
-      bf_lily: { g: 'f', hue: '#E4D5FF', lang: 'en-gb', name: 'Lily', desc: 'Soft, gentle' },
-      // British Male — steel blue
-      bm_daniel: { g: 'm', hue: '#7B90A9', lang: 'en-gb', name: 'Daniel', desc: 'Composed, clear' },
-      bm_fable: { g: 'm', hue: '#8BA0B9', lang: 'en-gb', name: 'Fable', desc: 'Storytelling, warm' },
-      bm_george: { g: 'm', hue: '#6B80A0', lang: 'en-gb', name: 'George', desc: 'Classic narrator' },
-      bm_lewis: { g: 'm', hue: '#9BB0C9', lang: 'en-gb', name: 'Lewis', desc: 'Thoughtful, measured' },
-      // Japanese — sakura pink / muted blue
-      jf_alpha: { g: 'f', hue: '#FFB7C5', lang: 'ja', name: 'Alpha', desc: 'Clear, natural' },
-      jf_gongitsune: { g: 'f', hue: '#FFC7D5', lang: 'ja', name: 'Gongitsune', desc: 'Gentle, expressive' },
-      jf_nezumi: { g: 'f', hue: '#FFD7E5', lang: 'ja', name: 'Nezumi', desc: 'Soft, delicate' },
-      jf_tebukuro: { g: 'f', hue: '#FFA7B5', lang: 'ja', name: 'Tebukuro', desc: 'Warm, friendly' },
-      jm_kumo: { g: 'm', hue: '#A0B4C8', lang: 'ja', name: 'Kumo', desc: 'Calm, steady' },
-      // Chinese — gold
-      zf_xiaobei: { g: 'f', hue: '#FFD700', lang: 'zh', name: 'Xiaobei', desc: 'Bright, cheerful' },
-      zf_xiaoni: { g: 'f', hue: '#FFE740', lang: 'zh', name: 'Xiaoni', desc: 'Warm, gentle' },
-      zf_xiaoxuan: { g: 'f', hue: '#FFC800', lang: 'zh', name: 'Xiaoxuan', desc: 'Clear, professional' },
-      zf_xiaoyi: { g: 'f', hue: '#FFF060', lang: 'zh', name: 'Xiaoyi', desc: 'Soft, soothing' },
-      zm_yunjian: { g: 'm', hue: '#E8B800', lang: 'zh', name: 'Yunjian', desc: 'Strong, commanding' },
-      zm_yunxi: { g: 'm', hue: '#D8A800', lang: 'zh', name: 'Yunxi', desc: 'Warm, rich' },
-      zm_yunxia: { g: 'm', hue: '#C89800', lang: 'zh', name: 'Yunxia', desc: 'Smooth, mellow' },
-      zm_yunyang: { g: 'm', hue: '#F0C000', lang: 'zh', name: 'Yunyang', desc: 'Energetic, bright' },
-      // Spanish — warm orange
-      ef_dora: { g: 'f', hue: '#FFB074', lang: 'es', name: 'Dora', desc: 'Warm, expressive' },
-      em_alex: { g: 'm', hue: '#FFA060', lang: 'es', name: 'Alex', desc: 'Clear, confident' },
-      em_santa: { g: 'm', hue: '#FF9050', lang: 'es', name: 'Santa', desc: 'Rich, resonant' },
-      // French — soft mauve
-      ff_siwis: { g: 'f', hue: '#D4A0D0', lang: 'fr', name: 'Siwis', desc: 'Elegant, smooth' },
-      // Hindi — saffron
-      hf_alpha: { g: 'f', hue: '#FFB347', lang: 'hi', name: 'Alpha', desc: 'Clear, natural' },
-      hf_beta: { g: 'f', hue: '#FFC370', lang: 'hi', name: 'Beta', desc: 'Warm, gentle' },
-      hm_omega: { g: 'm', hue: '#E0A030', lang: 'hi', name: 'Omega', desc: 'Deep, steady' },
-      hm_psi: { g: 'm', hue: '#D09020', lang: 'hi', name: 'Psi', desc: 'Rich, expressive' },
-      // Italian — warm green
-      if_sara: { g: 'f', hue: '#90D890', lang: 'it', name: 'Sara', desc: 'Warm, melodic' },
-      im_nicola: { g: 'm', hue: '#70C870', lang: 'it', name: 'Nicola', desc: 'Clear, engaging' },
-      // Portuguese — ocean blue
-      pf_dora: { g: 'f', hue: '#70B0E0', lang: 'pt-br', name: 'Dora', desc: 'Bright, friendly' },
-      pm_alex: { g: 'm', hue: '#60A0D0', lang: 'pt-br', name: 'Alex', desc: 'Warm, clear' },
-      pm_santa: { g: 'm', hue: '#5090C0', lang: 'pt-br', name: 'Santa', desc: 'Deep, resonant' },
+    const MODEL_SIZES = { 'tada-1b': '~4GB', 'tada-3b': '~9GB' };
+    const TADA_LANGUAGES = {
+      'en': 'English', 'ar': 'Arabic', 'zh': 'Chinese', 'de': 'German',
+      'es': 'Spanish', 'fr': 'French', 'it': 'Italian', 'ja': 'Japanese',
+      'pl': 'Polish', 'pt': 'Portuguese',
     };
 
-    // Top picks for narrative / audiobooks
-    const TOP_PICKS = [
-      { voice: 'af_heart', badge: '#1 Narration', bestFor: 'Audiobooks, narration, general purpose' },
-      { voice: 'af_bella', badge: 'Dynamic', bestFor: 'Dynamic narration, marketing' },
-      { voice: 'af_nicole', badge: 'Professional', bestFor: 'Non-fiction, tutorials, professional' },
-      { voice: 'af_sarah', badge: 'Versatile', bestFor: 'General audiobooks, balanced delivery' },
-      { voice: 'am_adam', badge: 'Male Lead', bestFor: 'Male narration, approachable tone' },
-      { voice: 'am_michael', badge: 'Authoritative', bestFor: 'Deep narration, documentary' },
-      { voice: 'bf_emma', badge: 'British', bestFor: 'British female, elegant narration' },
-      { voice: 'bm_george', badge: 'Classic', bestFor: 'British male, classic narrator' },
-    ];
+    // Voice profile hue generator (deterministic from name)
+    function _profileHue(name) {
+      let hash = 0;
+      for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash) + name.charCodeAt(i);
+      const hues = ['#FF7070','#4ECDC4','#A78BFA','#FFE66D','#FF9B9B','#6FE3DA','#C4B5FD','#FFB074','#D4A0D0','#90D890'];
+      return hues[Math.abs(hash) % hues.length];
+    }
 
     // ======================================================================
     // Toast
@@ -2723,12 +2718,15 @@
     // ======================================================================
     async function init() {
       try {
-        const [models, voices, health] = await Promise.all([api('/api/models'), api('/api/voices'), api('/api/health')]);
-        STATE.models = models; STATE.voices = voices;
+        const [models, voiceProfiles, health] = await Promise.all([api('/api/models'), api('/api/voices'), api('/api/health')]);
+        STATE.models = models;
+        STATE.voiceProfiles = voiceProfiles;
         STATE.ffmpeg = health.ffmpeg || false;
         STATE.alignmentAvailable = health.alignment || false;
         STATE.enhanceAvailable = health.enhance || false;
         STATE.vadAvailable = health.vad || false;
+        STATE.device = health.device || 'cpu';
+        STATE.gpuInfo = health.gpu || null;
         renderFeatureStatus(health);
         // Populate speed select
         const speedSel = $('#speed-select');
@@ -2739,7 +2737,7 @@
           if (val === '1.00') opt.selected = true;
           speedSel.appendChild(opt);
         }
-        const savedSpeed = localStorage.getItem('kokoro-speed');
+        const savedSpeed = localStorage.getItem('tada-speed');
         if (savedSpeed && speedSel.querySelector(`option[value="${savedSpeed}"]`)) speedSel.value = savedSpeed;
         // Silence threshold
         if (STATE.vadAvailable) {
@@ -2752,75 +2750,171 @@
             if (ms === 500) opt.selected = true;
             silSel.appendChild(opt);
           }
-          const savedSil = localStorage.getItem('kokoro-silence');
+          const savedSil = localStorage.getItem('tada-silence');
           if (savedSil && silSel.querySelector(`option[value="${savedSil}"]`)) silSel.value = savedSil;
         }
         $('#model-select').value = STATE.selectedModel;
         $('#model-size').textContent = MODEL_SIZES[STATE.selectedModel] || '';
-        const savedPrompt = localStorage.getItem('kokoro-prompt');
+        const savedPrompt = localStorage.getItem('tada-prompt');
         if (savedPrompt) { $('#prompt-input').value = _stripBrackets(savedPrompt); updateCounts(); }
-        renderVoices();
-        _applyBlendUI();
+        renderVoiceProfiles();
+        initStepToggles();
         setGenMode(STATE.genMode, true);
         buildEqualizer(); await loadHistory();
       } catch (e) { console.error('Init:', e); toast('Failed to connect to server', 'error'); }
     }
 
     // ======================================================================
-    // Voices
+    // Voice Profiles (TADA voice cloning)
     // ======================================================================
-    function buildVoiceGroups() {
-      const groups = {};
-      STATE.voices.forEach(v => {
-        const meta = VOICE_META[v] || { g: 'm', hue: '#AAB8CC', lang: 'en-us' };
-        const lang = meta.lang || 'en-us';
-        if (!groups[lang]) groups[lang] = [];
-        groups[lang].push(v);
-      });
-      return groups;
-    }
+    let _voiceUploadFile = null;
 
-    function renderLangTabs() {
-      const tabs = $('#lang-tabs'); tabs.innerHTML = '';
-      const groups = buildVoiceGroups();
-      const langOrder = ['en-us', 'en-gb', 'ja', 'zh', 'es', 'fr', 'hi', 'it', 'pt-br'];
-      const sortedLangs = Object.keys(groups).sort((a, b) => {
-        const ia = langOrder.indexOf(a), ib = langOrder.indexOf(b);
-        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-      });
-      const LANG_SHORT = {
-        'en-us': 'English US', 'en-gb': 'English UK', 'ja': 'Japanese',
-        'zh': 'Chinese', 'es': 'Spanish', 'fr': 'French', 'hi': 'Hindi',
-        'it': 'Italian', 'pt-br': 'Portuguese'
-      };
-      // Top Picks tab first
-      const topTab = document.createElement('button');
-      topTab.className = 'lang-tab top-picks-tab';
-      topTab.dataset.lang = 'top-picks';
-      topTab.dataset.active = STATE.selectedLang === 'top-picks' ? 'true' : 'false';
-      topTab.innerHTML = `<span style="margin-right:3px">&#9733;</span>Top Picks<span class="lang-count">${TOP_PICKS.length}</span>`;
-      topTab.onclick = () => selectLang('top-picks');
-      tabs.appendChild(topTab);
-      // Language tabs
-      for (const lang of sortedLangs) {
-        const tab = document.createElement('button');
-        tab.className = 'lang-tab';
-        tab.dataset.lang = lang;
-        tab.dataset.active = lang === STATE.selectedLang ? 'true' : 'false';
-        tab.innerHTML = `${LANG_SHORT[lang] || lang}<span class="lang-count">${groups[lang].length}</span>`;
-        tab.onclick = () => selectLang(lang);
-        tabs.appendChild(tab);
+    function renderVoiceProfiles() {
+      const list = $('#voice-profiles-list');
+      if (!list) return;
+      const noMsg = document.getElementById('no-voices-msg');
+      list.innerHTML = '';
+
+      if (!STATE.voiceProfiles || STATE.voiceProfiles.length === 0) {
+        if (noMsg) { list.appendChild(noMsg); noMsg.style.display = ''; }
+        return;
       }
+      if (noMsg) noMsg.style.display = 'none';
+
+      STATE.voiceProfiles.forEach((p, idx) => {
+        const hue = _profileHue(p.name || p.id);
+        const isActive = STATE.selectedVoice === p.id;
+        const card = document.createElement('button');
+        card.className = 'voice-profile-card';
+        card.dataset.voiceId = p.id;
+        card.style.cssText = `display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;
+          border-radius:8px;border:1.5px solid ${isActive ? 'var(--accent)' : 'var(--border)'};
+          background:${isActive ? 'rgba(78,205,196,0.06)' : 'var(--bg-darkest)'};
+          cursor:pointer;font-family:inherit;text-align:left;transition:all 0.2s;
+          animation:reveal 0.35s cubic-bezier(0.16,1,0.3,1) both;animation-delay:${idx * 0.03}s`;
+        const transcript = p.transcript || '';
+        card.innerHTML = `
+          <span style="width:8px;height:8px;border-radius:50%;background:${hue};flex-shrink:0"></span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--text)">${p.name || p.id}</div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              ${transcript ? transcript.substring(0, 60) + (transcript.length > 60 ? '...' : '') : 'No transcript'}
+            </div>
+          </div>
+          <span style="font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--text-muted);opacity:0.5;flex-shrink:0">${p.created ? p.created.split('T')[0] : ''}</span>
+          <button onclick="event.stopPropagation();deleteVoiceProfile('${p.id}')" title="Delete voice"
+            style="width:24px;height:24px;border-radius:6px;border:none;background:transparent;color:var(--coral);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;opacity:0.5;transition:opacity 0.2s"
+            onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        `;
+        card.onclick = () => selectVoice(p.id);
+        list.appendChild(card);
+      });
     }
 
-    function selectLang(lang) {
-      STATE.selectedLang = lang;
-      localStorage.setItem('kokoro-lang', lang);
-      $$('.lang-tab').forEach(t => { t.dataset.active = t.dataset.lang === lang ? 'true' : 'false'; });
-      renderVoiceGrid();
+    function selectVoice(voiceId) {
+      STATE.selectedVoice = voiceId;
+      localStorage.setItem('tada-voice', voiceId);
+      $$('.voice-profile-card').forEach(c => {
+        const isActive = c.dataset.voiceId === voiceId;
+        c.style.borderColor = isActive ? 'var(--accent)' : 'var(--border)';
+        c.style.background = isActive ? 'rgba(78,205,196,0.06)' : 'var(--bg-darkest)';
+      });
     }
 
-    function renderVoiceGrid() {
+    function showVoiceUpload() {
+      _voiceUploadFile = null;
+      const panel = $('#voice-upload-panel');
+      if (panel) panel.style.display = 'block';
+      const details = $('#voice-upload-details');
+      if (details) details.style.display = 'none';
+      const nameIn = $('#voice-name-input'); if (nameIn) nameIn.value = '';
+      const transIn = $('#voice-transcript-input'); if (transIn) transIn.value = '';
+    }
+    function cancelVoiceUpload() {
+      const panel = $('#voice-upload-panel');
+      if (panel) panel.style.display = 'none';
+      _voiceUploadFile = null;
+    }
+    function handleVoiceFileSelect(input) {
+      if (!input.files || !input.files[0]) return;
+      _voiceUploadFile = input.files[0];
+      $('#voice-upload-filename').textContent = _voiceUploadFile.name;
+      $('#voice-upload-details').style.display = 'block';
+      const baseName = _voiceUploadFile.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
+      if (!$('#voice-name-input').value) $('#voice-name-input').value = baseName;
+    }
+    // Drag-drop for voice upload
+    (function() {
+      const zone = document.getElementById('voice-drop-zone');
+      if (!zone) return;
+      zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.borderColor = 'var(--accent)'; });
+      zone.addEventListener('dragleave', () => { zone.style.borderColor = 'var(--border)'; });
+      zone.addEventListener('drop', e => {
+        e.preventDefault(); zone.style.borderColor = 'var(--border)';
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          const file = e.dataTransfer.files[0];
+          if (/\.(wav|mp3|flac|ogg)$/i.test(file.name)) {
+            _voiceUploadFile = file;
+            $('#voice-upload-filename').textContent = file.name;
+            $('#voice-upload-details').style.display = 'block';
+            const baseName = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
+            if (!$('#voice-name-input').value) $('#voice-name-input').value = baseName;
+          } else { toast('Use WAV, MP3, FLAC, or OGG', 'error'); }
+        }
+      });
+    })();
+
+    async function uploadVoiceProfile() {
+      if (!_voiceUploadFile) { toast('Select an audio file first', 'error'); return; }
+      const name = $('#voice-name-input').value.trim();
+      const transcript = $('#voice-transcript-input').value.trim();
+      if (!name) { toast('Enter a voice name', 'error'); return; }
+      const formData = new FormData();
+      formData.append('audio', _voiceUploadFile);
+      formData.append('name', name);
+      formData.append('transcript', transcript);
+      try {
+        const res = await fetch('/api/voices/upload', { method: 'POST', body: formData });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Upload failed'); }
+        const profile = await res.json();
+        STATE.voiceProfiles.unshift(profile);
+        STATE.selectedVoice = profile.id;
+        localStorage.setItem('tada-voice', profile.id);
+        renderVoiceProfiles();
+        cancelVoiceUpload();
+        toast(`Voice "${name}" created`);
+      } catch (e) { toast(e.message || 'Upload failed', 'error'); }
+    }
+
+    async function deleteVoiceProfile(voiceId) {
+      const ok = await confirmDialog({ title: 'Delete Voice Profile?', desc: 'This will permanently remove it.', confirmLabel: 'Delete', confirmColor: 'var(--coral)' });
+      if (!ok) return;
+      try {
+        await api(`/api/voices/${voiceId}`, { method: 'DELETE' });
+        STATE.voiceProfiles = STATE.voiceProfiles.filter(p => p.id !== voiceId);
+        if (STATE.selectedVoice === voiceId) {
+          STATE.selectedVoice = STATE.voiceProfiles.length > 0 ? STATE.voiceProfiles[0].id : '';
+          localStorage.setItem('tada-voice', STATE.selectedVoice);
+        }
+        renderVoiceProfiles();
+        toast('Voice profile deleted');
+      } catch (e) { toast(e.message || 'Delete failed', 'error'); }
+    }
+
+    // Legacy stubs
+    function switchVoiceTab() {} function toggleBlendMode() {} function _applyBlendUI() {}
+    function openBlendPicker() {} function closeBlendPicker() {} function selectBlendVoice() {}
+    function updateBlendButtons() {} function updateBlendRatio() {} function setBlendRatio() {}
+    function setBlendMethod() {} function renderBlendPresets() {} function applyBlendPreset() {}
+    function randomBlend() {} function renderBlendPickerTabs() {} function renderBlendPickerGrid() {}
+    function buildVoiceGroups() { return {}; } function renderLangTabs() {}
+    function selectLang() {} function renderVoiceGrid() {} function renderTopPicks() {}
+    function renderVoices() { renderVoiceProfiles(); }
+
+    /* old voice/blend code removed — TADA uses voice profiles */
+    if (false) { function _dead_renderVoiceGrid() {
       const g = $('#voice-grid'); g.innerHTML = '';
 
       if (STATE.selectedLang === 'top-picks') {
@@ -3123,12 +3217,12 @@
       }
       updateBlendButtons();
       closeBlendPicker();
-    }
+    } } // end dead code guard
 
     // ======================================================================
     // Prompt Counter
     // ======================================================================
-    $('#prompt-input').addEventListener('input', () => { updateCounts(); localStorage.setItem('kokoro-prompt', $('#prompt-input').value); });
+    $('#prompt-input').addEventListener('input', () => { updateCounts(); localStorage.setItem('tada-prompt', $('#prompt-input').value); });
     function updateCounts() {
       const t = $('#prompt-input').value.replace(/[\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
       const w = t ? t.split(/\s+/).length : 0;
@@ -3151,7 +3245,7 @@
         });
         input.value = res.normalized;
         updateCounts();
-        localStorage.setItem('kokoro-prompt', input.value);
+        localStorage.setItem('tada-prompt', input.value);
         toast('Text normalized for TTS');
       } catch (e) { toast(e.message || 'Normalization failed', 'error'); }
       finally { btn.disabled = false; btn.textContent = orig; }
@@ -3194,7 +3288,7 @@
     // ======================================================================
     $('#model-select').addEventListener('change', e => {
       STATE.selectedModel = e.target.value;
-      localStorage.setItem('kokoro-model', STATE.selectedModel);
+      localStorage.setItem('tada-model', STATE.selectedModel);
       $('#model-size').textContent = MODEL_SIZES[STATE.selectedModel] || '';
     });
 
@@ -3221,6 +3315,74 @@
           <span class="font-mono" style="font-size:10px;color:${ok ? 'var(--accent)' : 'var(--coral)'};flex-shrink:0">${ok ? 'Available' : 'Not installed'}</span>
         </div>`;
       }).join('');
+
+      // Update device UI
+      updateDeviceUI(health.device || 'cpu', health.gpu);
+      const settingsDevice = document.getElementById('settings-device');
+      if (settingsDevice) settingsDevice.textContent = (health.device || 'cpu').toUpperCase() + (health.gpu?.name ? ` (${health.gpu.name})` : '');
+    }
+
+    function updateDeviceUI(device, gpuInfo) {
+      const cpuBtn = $('#device-cpu-btn');
+      const gpuBtn = $('#device-gpu-btn');
+      const gpuInfoEl = $('#gpu-info');
+      if (!cpuBtn || !gpuBtn) return;
+
+      if (device === 'cuda') {
+        cpuBtn.style.borderColor = 'var(--border)'; cpuBtn.style.background = 'transparent'; cpuBtn.style.color = 'var(--text-muted)';
+        gpuBtn.style.borderColor = 'var(--accent)'; gpuBtn.style.background = 'rgba(78,205,196,0.06)'; gpuBtn.style.color = 'var(--accent)';
+      } else {
+        cpuBtn.style.borderColor = 'var(--accent)'; cpuBtn.style.background = 'rgba(78,205,196,0.06)'; cpuBtn.style.color = 'var(--accent)';
+        gpuBtn.style.borderColor = 'var(--border)'; gpuBtn.style.background = 'transparent'; gpuBtn.style.color = 'var(--text-muted)';
+      }
+
+      if (gpuInfoEl && gpuInfo) {
+        if (gpuInfo.available) {
+          gpuInfoEl.textContent = `${gpuInfo.name} (${gpuInfo.vram_mb} MB VRAM)`;
+          gpuBtn.disabled = false;
+        } else {
+          gpuInfoEl.textContent = 'No CUDA GPU detected';
+          gpuInfoEl.style.color = 'var(--coral)';
+          gpuBtn.disabled = true; gpuBtn.style.opacity = '0.4'; gpuBtn.style.cursor = 'not-allowed';
+        }
+      }
+    }
+
+    function toggleStep(step, enabled) {
+      if (step === 'enhance') { STATE.stepEnhance = enabled; localStorage.setItem('tada-step-enhance', enabled); }
+      else if (step === 'clean') { STATE.stepClean = enabled; localStorage.setItem('tada-step-clean', enabled); }
+      else if (step === 'mp3') { STATE.stepMp3 = enabled; localStorage.setItem('tada-step-mp3', enabled); }
+    }
+
+    function initStepToggles() {
+      const enhEl = $('#step-enhance-toggle');
+      const clnEl = $('#step-clean-toggle');
+      const mp3El = $('#step-mp3-toggle');
+      if (enhEl) enhEl.checked = STATE.stepEnhance;
+      if (clnEl) clnEl.checked = STATE.stepClean;
+      if (mp3El) mp3El.checked = STATE.stepMp3;
+    }
+
+    /** Pick the best available audio version to play after generation */
+    function autoBestVersion() {
+      const np = STATE.nowPlaying; if (!np) return;
+      if (STATE.stepClean && np._cleanedFilename) { switchAudioVersion('cleaned'); return; }
+      if (STATE.stepEnhance && np._enhancedFilename) { switchAudioVersion('enhanced'); return; }
+      // Stay on original
+    }
+
+    async function setDevice(device) {
+      try {
+        const res = await api('/api/device', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ device }),
+        });
+        STATE.device = res.device;
+        updateDeviceUI(res.device, STATE.gpuInfo);
+        const settingsDevice = document.getElementById('settings-device');
+        if (settingsDevice) settingsDevice.textContent = res.device.toUpperCase() + (STATE.gpuInfo?.name ? ` (${STATE.gpuInfo.name})` : '');
+        toast(`Device set to ${res.device.toUpperCase()}`);
+      } catch (e) { toast(e.message || 'Failed to set device', 'error'); }
     }
 
     // ======================================================================
@@ -3274,10 +3436,11 @@
       if (el) el.remove();
     }
     function updateDownloadFile(filename, progress, detail) {
-      let el = document.getElementById('dl-f-' + CSS.escape(filename));
+      const slug = 'dl-f-' + filename.replace(/[^a-zA-Z0-9_-]/g, '_');
+      let el = document.getElementById(slug);
       if (!el) {
         el = document.createElement('div');
-        el.id = 'dl-f-' + filename;
+        el.id = slug;
         el.style.cssText = 'padding:12px;border-radius:8px;background:var(--bg-darkest);animation:reveal 0.35s cubic-bezier(0.16,1,0.3,1) both;';
         el.style.animationDelay = ($('#dl-files').children.length * 0.08) + 's';
         el.innerHTML = `
@@ -3288,14 +3451,14 @@
       <div class="dl-progress-track">
         <div class="dl-progress-fill ${progress < 100 ? 'active' : ''}" style="width:${progress}%"></div>
       </div>
-      <p class="dl-detail font-mono" style="font-size:10px;color:var(--text-muted);margin-top:5px">${detail}</p>`;
+      <p class="dl-detail font-mono" style="font-size:10px;color:var(--text-muted);margin-top:5px">${detail || ''}</p>`;
         $('#dl-files').appendChild(el);
       } else {
         el.querySelector('.dl-pct').textContent = progress + '%';
         const fill = el.querySelector('.dl-progress-fill');
         fill.style.width = progress + '%';
         if (progress >= 100) fill.classList.remove('active');
-        el.querySelector('.dl-detail').textContent = detail;
+        el.querySelector('.dl-detail').textContent = detail || '';
       }
     }
     function cancelDownload() {
@@ -3306,7 +3469,23 @@
     // ======================================================================
     // Generate — Stepper
     // ======================================================================
-    function showStepper() { $('#process-stepper').style.display = 'block'; }
+    function showStepper() {
+      $('#process-stepper').style.display = 'block';
+      // Hide disabled steps and their connecting lines
+      const disabledSteps = new Set();
+      if (!STATE.stepEnhance || !STATE.enhanceAvailable) disabledSteps.add(2);
+      if (!STATE.stepClean || !STATE.vadAvailable) { disabledSteps.add(3); disabledSteps.add(4); }
+      if (!STATE.stepMp3 || !STATE.ffmpeg) disabledSteps.add(5);
+      document.querySelectorAll('.step-node').forEach(n => {
+        const s = parseInt(n.dataset.step);
+        n.style.display = disabledSteps.has(s) ? 'none' : '';
+      });
+      document.querySelectorAll('.step-line').forEach(l => {
+        const li = parseInt(l.dataset.line);
+        // Hide line if the step it leads TO is disabled, or if step it leads FROM is disabled
+        l.style.display = (disabledSteps.has(li) || disabledSteps.has(li + 1)) ? 'none' : '';
+      });
+    }
     function hideStepper() { $('#process-stepper').style.display = 'none'; resetStepperStates(); }
     function resetStepperStates() {
       document.querySelectorAll('.step-node').forEach(n => {
@@ -3340,10 +3519,11 @@
     }
     function setStepDone() {
       document.querySelectorAll('.step-node').forEach(n => {
+        if (n.style.display === 'none') return; // skip hidden/disabled steps
         n.dataset.state = 'done';
         n.querySelector('.step-dot').innerHTML = '<svg width="12" height="12" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
       });
-      document.querySelectorAll('.step-line').forEach(l => { l.classList.add('done'); l.classList.remove('active'); });
+      document.querySelectorAll('.step-line').forEach(l => { if (l.style.display !== 'none') { l.classList.add('done'); l.classList.remove('active'); } });
       const btn = $('#generate-btn');
       btn.classList.remove('step-enhance', 'step-vad', 'step-loudnorm', 'step-mp3');
       btn.classList.add('step-done');
@@ -3377,7 +3557,7 @@
     // ---- Mode Toggle: Generate / Listen ----
     function setGenMode(mode, silent) {
       STATE.genMode = mode;
-      if (!silent) localStorage.setItem('kokoro-gen-mode', mode);
+      if (!silent) localStorage.setItem('tada-gen-mode', mode);
       document.querySelectorAll('.mode-toggle-btn').forEach(b => {
         b.dataset.active = b.classList.contains('mode-' + mode) ? 'true' : 'false';
       });
@@ -3410,17 +3590,12 @@
       $('#gen-spinner').classList.remove('hidden');
 
       const speed = parseFloat($('#speed-select').value) || 1.0;
+      if (!STATE.selectedVoice) { toast('Select a voice profile first', 'error'); setGenerating(false); return; }
       const payload = {
         model: STATE.selectedModel,
-        voice: STATE.blendMode ? STATE.blendVoiceA : STATE.selectedVoice,
+        voice: STATE.selectedVoice,
         prompt, speed
       };
-      if (STATE.blendMode) {
-        payload.blend = {
-          voice_a: STATE.blendVoiceA, voice_b: STATE.blendVoiceB,
-          ratio: (100 - STATE.blendRatio) / 100, method: STATE.blendMethod
-        };
-      }
 
       const abortCtrl = new AbortController();
       STATE.streamAbortController = abortCtrl;
@@ -3572,24 +3747,21 @@
       try {
         try {
           const fmt = await api('/api/normalize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: prompt }), signal: abort.signal });
-          if (fmt.normalized && fmt.normalized !== prompt) { $('#prompt-input').value = fmt.normalized; updateCounts(); localStorage.setItem('kokoro-prompt', fmt.normalized); }
+          if (fmt.normalized && fmt.normalized !== prompt) { $('#prompt-input').value = fmt.normalized; updateCounts(); localStorage.setItem('tada-prompt', fmt.normalized); }
         } catch (_) { if (abort.signal.aborted) throw new DOMException('Aborted', 'AbortError'); }
         const status = await api(`/api/model-status/${STATE.selectedModel}`, { signal: abort.signal });
         if (!status.cached) await downloadModel(STATE.selectedModel);
         const speed = parseFloat($('#speed-select').value) || 1.0;
         const max_silence_ms = parseInt($('#silence-select').value) || 500;
         const finalPrompt = $('#prompt-input').value.trim();
+        if (!STATE.selectedVoice) { toast('Select a voice profile first', 'error'); setGenerating(false); hideStepper(); return; }
         const genPayload = {
           model: STATE.selectedModel,
-          voice: STATE.blendMode ? STATE.blendVoiceA : STATE.selectedVoice,
-          prompt: finalPrompt, speed, max_silence_ms
+          voice: STATE.selectedVoice,
+          prompt: finalPrompt, speed, max_silence_ms,
+          skip_enhance: !STATE.stepEnhance,
+          skip_clean: !STATE.stepClean,
         };
-        if (STATE.blendMode) {
-          genPayload.blend = {
-            voice_a: STATE.blendVoiceA, voice_b: STATE.blendVoiceB,
-            ratio: (100 - STATE.blendRatio) / 100, method: STATE.blendMethod
-          };
-        }
         const genResult = await api('/api/generate', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(genPayload),
@@ -3604,12 +3776,14 @@
         // Keep isGenerating true — post-processing polls use the abort signal
         $('#abort-btn').style.display = 'none';
         const sig = abort.signal;
-        if (STATE.enhanceAvailable) { setStepActive(2); await pollUntilDone(`/api/generation/${result.filename}/enhance-status`, 'ready', 'enhancing', 1500, null, sig); }
-        if (STATE.vadAvailable) { setStepActive(3); await pollUntilDone(`/api/generation/${result.filename}/vad-status`, 'ready', 'cleaning', 1500, (data) => { if (data.status === 'normalizing' && STATE.processingStep === 3) setStepActive(4); }, sig); }
-        if (STATE.ffmpeg && STATE.nowPlaying && STATE.nowPlaying._cleanedFilename) { setStepActive(5); await autoConvertMp3(STATE.nowPlaying._cleanedFilename); STATE.nowPlaying._cleanedMp3 = true; updateCleanedMp3Btn(); }
+        if (STATE.stepEnhance && STATE.enhanceAvailable) { setStepActive(2); await pollUntilDone(`/api/generation/${result.filename}/enhance-status`, 'ready', 'enhancing', 1500, null, sig); }
+        if (STATE.stepClean && STATE.vadAvailable) { setStepActive(3); await pollUntilDone(`/api/generation/${result.filename}/vad-status`, 'ready', 'cleaning', 1500, (data) => { if (data.status === 'normalizing' && STATE.processingStep === 3) setStepActive(4); }, sig); }
+        if (STATE.stepMp3 && STATE.ffmpeg && STATE.nowPlaying && STATE.nowPlaying._cleanedFilename) { setStepActive(5); await autoConvertMp3(STATE.nowPlaying._cleanedFilename); STATE.nowPlaying._cleanedMp3 = true; updateCleanedMp3Btn(); }
         // Alignment runs in background on the backend — no need to block the UI
         STATE.generateAbort = null;
         setStepDone(); pollVersionStatuses(result.filename, true); await loadHistory();
+        // Auto-switch to the best processed version
+        autoBestVersion();
       } catch (e) { if (e.name === 'AbortError') { hideStepper(); setGenerating(false); return; } toast(e.message || 'Generation failed', 'error'); hideStepper(); setGenerating(false); }
     }
 
@@ -4102,7 +4276,7 @@
       if (STATE.vadPollTimer) { clearTimeout(STATE.vadPollTimer); STATE.vadPollTimer = null; }
       const enhBtn = document.querySelector('.ver-btn[data-ver="enhanced"]');
       const clnBtn = document.querySelector('.ver-btn[data-ver="cleaned"]');
-      if (STATE.enhanceAvailable) {
+      if (STATE.stepEnhance && STATE.enhanceAvailable) {
         enhBtn.classList.add('is-loading'); showVersionGroup(true);
         let enhPollCount = 0;
         let enhConsecErrors = 0;
@@ -4130,7 +4304,7 @@
         }
         pollEnh();
       }
-      if (STATE.vadAvailable) {
+      if (STATE.stepClean && STATE.vadAvailable) {
         clnBtn.classList.add('is-loading'); showVersionGroup(true);
         let vadPollCount = 0;
         let vadConsecErrors = 0;
@@ -4385,7 +4559,7 @@
       const text = _stripBrackets(STATE.history[idx].prompt || '');
       $('#prompt-input').value = text;
       updateCounts();
-      localStorage.setItem('kokoro-prompt', text);
+      localStorage.setItem('tada-prompt', text);
       toast('Loaded into prompt');
     }
     function timeAgo(ts) {

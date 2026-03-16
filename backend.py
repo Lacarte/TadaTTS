@@ -1,4 +1,4 @@
-"""Kokoro TTS Studio — Flask API Server"""
+"""TADA TTS Studio — Flask API Server"""
 
 import argparse
 import asyncio
@@ -58,7 +58,7 @@ def _console_format(record):
 logger.add(sys.stderr, level="INFO", format=_console_format, colorize=True)
 
 # File: DEBUG and above, rotated daily, kept 7 days
-logger.add(os.path.join(LOG_DIR, "kokoro_{time:YYYY-MM-DD}.log"),
+logger.add(os.path.join(LOG_DIR, "tada_{time:YYYY-MM-DD}.log"),
            level="DEBUG", rotation="1 day", retention="7 days", compression="zip",
            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<7} | {name}:{function}:{line} - {message}")
 
@@ -81,105 +81,44 @@ MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
 os.makedirs(MODELS_DIR, exist_ok=True)
 
 MODELS = {
-    "kokoro": {
-        "name": "Kokoro v1.0",
-        "size": "~373MB",
-        "onnx_file": "kokoro-v1.0.onnx",
-        "voices_file": "voices-v1.0.bin",
-        "onnx_url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
-        "voices_url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
+    "tada-1b": {
+        "name": "TADA 1B",
+        "size": "~4GB",
+        "hf_model_id": "HumeAI/tada-1b",
+        "languages": ["en"],
+        "params": "~2B",
+    },
+    "tada-3b": {
+        "name": "TADA 3B Multilingual",
+        "size": "~9GB",
+        "hf_model_id": "HumeAI/tada-3b-ml",
+        "languages": ["en", "ar", "zh", "de", "es", "fr", "it", "ja", "pl", "pt"],
+        "params": "~4B",
     },
 }
 
-# Voice prefix -> language code mapping for kokoro-onnx
-VOICE_LANG_MAP = {
-    "af": "en-us", "am": "en-us",
-    "bf": "en-gb", "bm": "en-gb",
-    "jf": "ja",    "jm": "ja",
-    "zf": "cmn",   "zm": "cmn",
-    "ef": "es",    "em": "es",
-    "ff": "fr-fr",
-    "hf": "hi",    "hm": "hi",
-    "if": "it",    "im": "it",
-    "pf": "pt-br", "pm": "pt-br",
+# TADA codec encoder (shared across models)
+ENCODER_HF_ID = "HumeAI/tada-codec"
+
+# Language code mapping for TADA 3B multilingual
+TADA_LANGUAGES = {
+    "en": "English", "ar": "Arabic", "zh": "Chinese", "de": "German",
+    "es": "Spanish", "fr": "French", "it": "Italian", "ja": "Japanese",
+    "pl": "Polish", "pt": "Portuguese",
 }
 
-VOICES = [
-    # American Female
-    "af_alloy", "af_aoede", "af_bella", "af_heart", "af_jessica",
-    "af_kore", "af_nicole", "af_nova", "af_river", "af_sarah", "af_sky",
-    # American Male
-    "am_adam", "am_echo", "am_eric", "am_fenrir", "am_liam",
-    "am_michael", "am_onyx", "am_puck",
-    # British Female
-    "bf_alice", "bf_emma", "bf_isabella", "bf_lily",
-    # British Male
-    "bm_daniel", "bm_fable", "bm_george", "bm_lewis",
-    # Japanese
-    "jf_alpha", "jf_gongitsune", "jf_nezumi", "jf_tebukuro", "jm_kumo",
-    # Chinese
-    "zf_xiaobei", "zf_xiaoni", "zf_xiaoxuan", "zf_xiaoyi",
-    "zm_yunjian", "zm_yunxi", "zm_yunxia", "zm_yunyang",
-    # Spanish
-    "ef_dora", "em_alex", "em_santa",
-    # French
-    "ff_siwis",
-    # Hindi
-    "hf_alpha", "hf_beta", "hm_omega", "hm_psi",
-    # Italian
-    "if_sara", "im_nicola",
-    # Portuguese
-    "pf_dora", "pm_alex", "pm_santa",
-]
+# Voice profiles directory
+VOICES_DIR = os.path.join(os.path.dirname(__file__), "voices")
+os.makedirs(VOICES_DIR, exist_ok=True)
 
+# Default device selection
+_current_device = "cpu"
+_current_model_id = None
 
-def _voice_to_lang(voice_name: str) -> str:
-    """Derive the kokoro-onnx lang parameter from a voice name prefix."""
-    prefix = voice_name.split("_")[0] if "_" in voice_name else voice_name[:2]
-    return VOICE_LANG_MAP.get(prefix, "en-us")
-
-
-# --- Voice blending (SLERP / LERP) ---
-
-def _slerp(v0: np.ndarray, v1: np.ndarray, t: float) -> np.ndarray:
-    """Spherical linear interpolation. t=0 returns v0, t=1 returns v1.
-    Works on 1-D vectors or 2-D arrays (row-wise)."""
-    v0 = v0.astype(np.float64)
-    v1 = v1.astype(np.float64)
-    if v0.ndim == 1:
-        n0, n1 = np.linalg.norm(v0), np.linalg.norm(v1)
-        dot = np.clip(np.dot(v0, v1) / (n0 * n1 + 1e-10), -1.0, 1.0)
-        omega = np.arccos(dot)
-        if abs(omega) < 1e-6:
-            return ((1.0 - t) * v0 + t * v1).astype(np.float32)
-        so = np.sin(omega)
-        return ((np.sin((1.0 - t) * omega) / so) * v0
-                + (np.sin(t * omega) / so) * v1).astype(np.float32)
-    # 2-D: row-wise
-    result = np.empty_like(v0)
-    for i in range(v0.shape[0]):
-        result[i] = _slerp(v0[i], v1[i], t)
-    return result.astype(np.float32)
-
-
-def _lerp(v0: np.ndarray, v1: np.ndarray, t: float) -> np.ndarray:
-    """Linear interpolation. t=0 returns v0, t=1 returns v1."""
-    return ((1.0 - t) * v0 + t * v1).astype(np.float32)
-
-
-def _blend_voices(kokoro_inst, voice_a: str, voice_b: str,
-                  ratio: float, method: str = "slerp") -> np.ndarray:
-    """Blend two voice embeddings. ratio: 0.0=100% A, 1.0=100% B."""
-    embed_a = kokoro_inst.get_voice_style(voice_a)
-    embed_b = kokoro_inst.get_voice_style(voice_b)
-    if method == "slerp":
-        return _slerp(embed_a, embed_b, ratio)
-    return _lerp(embed_a, embed_b, ratio)
-
-
-# Cached Kokoro instance (single model)
-kokoro_instance = None
-kokoro_lock = threading.Lock()
+# Cached TADA instances
+tada_encoder = None
+tada_model = None
+tada_lock = threading.Lock()
 
 # Alignment model (stable-ts / Whisper) — optional feature
 alignment_model = None
@@ -206,7 +145,7 @@ vad_tasks_lock = threading.Lock()
 # Chunked generation jobs: {job_id: {"queue": Queue, "status": str, "metadata": dict, "created": float}}
 generation_jobs = {}
 generation_jobs_lock = threading.Lock()
-generation_inference_lock = threading.Lock()  # Serialize ONNX inference (not thread-safe)
+generation_inference_lock = threading.Lock()  # Serialize TADA inference (not thread-safe)
 
 # Per-basename locks for metadata JSON read-modify-write (prevents race conditions
 # between alignment, enhancement, and VAD threads overwriting each other's fields)
@@ -664,39 +603,189 @@ def find_available_port(start: int = 5000) -> int:
     return start
 
 
-def _model_files_present() -> bool:
-    """Check if both kokoro model files exist locally."""
-    cfg = MODELS["kokoro"]
-    onnx_path = os.path.join(MODELS_DIR, cfg["onnx_file"])
-    voices_path = os.path.join(MODELS_DIR, cfg["voices_file"])
-    return os.path.isfile(onnx_path) and os.path.isfile(voices_path)
+def _model_files_present(model_id=None) -> bool:
+    """Check if TADA model is cached in HuggingFace hub."""
+    try:
+        from huggingface_hub import try_to_load_from_cache
+        if model_id is None:
+            model_id = _current_model_id or "tada-1b"
+        cfg = MODELS.get(model_id, MODELS["tada-1b"])
+        # Check if model config exists in cache
+        result = try_to_load_from_cache(cfg["hf_model_id"], "config.json")
+        return result is not None and not isinstance(result, type(None))
+    except Exception:
+        return False
 
 
-def load_model():
-    """Load (or return cached) Kokoro instance."""
-    global kokoro_instance
-    if kokoro_instance is not None:
-        return kokoro_instance
+def _get_device():
+    """Return the current device string."""
+    return _current_device
 
-    from kokoro_onnx import Kokoro
 
-    cfg = MODELS["kokoro"]
-    onnx_path = os.path.join(MODELS_DIR, cfg["onnx_file"])
-    voices_path = os.path.join(MODELS_DIR, cfg["voices_file"])
+def _set_device(device: str):
+    """Set the device and reload models if needed."""
+    global _current_device, tada_encoder, tada_model
+    device = device.lower().strip()
+    if device not in ("cpu", "cuda"):
+        device = "cpu"
+    if device == "cuda":
+        try:
+            import torch
+            if not torch.cuda.is_available():
+                logger.warning("CUDA not available, falling back to CPU")
+                device = "cpu"
+        except ImportError:
+            device = "cpu"
+    if device != _current_device:
+        _current_device = device
+        # Force reload on next generation
+        with tada_lock:
+            tada_encoder = None
+            tada_model = None
+        logger.info("Device set to {}", device)
 
-    with kokoro_lock:
-        if kokoro_instance is None:
-            logger.info("Loading Kokoro model ...")
-            kokoro_instance = Kokoro(onnx_path, voices_path)
-            try:
-                available = kokoro_instance.get_voices()
-                if available:
-                    global VOICES
-                    VOICES = sorted(available)
-            except Exception:
-                pass
-            logger.success("Kokoro model ready")
-    return kokoro_instance
+
+def _check_gpu_info():
+    """Return GPU info dict or None if no GPU."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            props = torch.cuda.get_device_properties(0)
+            return {
+                "name": props.name,
+                "vram_mb": round(props.total_mem / 1024 / 1024),
+                "available": True,
+            }
+    except Exception:
+        pass
+    return {"name": None, "vram_mb": 0, "available": False}
+
+
+def load_encoder():
+    """Load (or return cached) TADA encoder."""
+    global tada_encoder
+    if tada_encoder is not None:
+        return tada_encoder
+
+    import torch
+    from tada.modules.encoder import Encoder
+
+    device = _get_device()
+    with tada_lock:
+        if tada_encoder is None:
+            logger.info("Loading TADA encoder on {} ...", device)
+            tada_encoder = Encoder.from_pretrained(
+                ENCODER_HF_ID, subfolder="encoder"
+            ).to(device)
+            logger.success("TADA encoder ready on {}", device)
+    return tada_encoder
+
+
+def load_model(model_id=None):
+    """Load (or return cached) TADA model."""
+    global tada_model, _current_model_id
+    if model_id is None:
+        model_id = _current_model_id or "tada-1b"
+
+    # If switching models, unload previous
+    if _current_model_id and _current_model_id != model_id:
+        with tada_lock:
+            tada_model = None
+            _current_model_id = None
+
+    if tada_model is not None:
+        return tada_model
+
+    import torch
+    from tada.modules.tada import TadaForCausalLM
+
+    cfg = MODELS.get(model_id, MODELS["tada-1b"])
+    device = _get_device()
+    dtype = torch.bfloat16 if device == "cuda" else torch.float32
+
+    with tada_lock:
+        if tada_model is None:
+            logger.info("Loading {} on {} ({}) ...", cfg["name"], device, dtype)
+            tada_model = TadaForCausalLM.from_pretrained(
+                cfg["hf_model_id"], dtype=dtype
+            ).to(device)
+            _current_model_id = model_id
+            logger.success("{} ready on {}", cfg["name"], device)
+    return tada_model
+
+
+def _load_voice_profile(voice_id):
+    """Load a voice profile and return the encoded prompt."""
+    import torch
+    import torchaudio
+    from tada.modules.encoder import EncoderOutput
+
+    profile_dir = os.path.join(VOICES_DIR, voice_id)
+    if not os.path.isdir(profile_dir):
+        return None
+
+    # Check for cached prompt
+    cache_path = os.path.join(profile_dir, "prompt_cache.pt")
+    if os.path.exists(cache_path):
+        try:
+            return EncoderOutput.load(cache_path, device=_get_device())
+        except Exception:
+            pass  # Re-encode if cache invalid
+
+    # Find audio file
+    meta_path = os.path.join(profile_dir, "profile.json")
+    if not os.path.exists(meta_path):
+        return None
+    with open(meta_path, "r") as f:
+        meta = json.load(f)
+
+    audio_file = meta.get("audio_file", "")
+    transcript = meta.get("transcript", "")
+    audio_path = os.path.join(profile_dir, audio_file)
+    if not os.path.exists(audio_path):
+        return None
+
+    # Encode (cap at 15s to avoid OOM in aligner's 128K-vocab CTC logits)
+    encoder = load_encoder()
+    audio, sr = torchaudio.load(audio_path)
+    max_samples = sr * 15
+    if audio.shape[-1] > max_samples:
+        audio = audio[:, :max_samples]
+        logger.info("Trimmed reference audio to 15s for voice {}", voice_id)
+    audio = audio.to(_get_device())
+    text_arg = [transcript] if transcript else None
+    prompt = encoder(audio, text=text_arg, sample_rate=sr)
+
+    # Cache for future use
+    try:
+        prompt.save(cache_path)
+    except Exception:
+        pass
+
+    return prompt
+
+
+def _list_voice_profiles():
+    """List all saved voice profiles."""
+    profiles = []
+    if not os.path.exists(VOICES_DIR):
+        return profiles
+    for entry in os.listdir(VOICES_DIR):
+        profile_dir = os.path.join(VOICES_DIR, entry)
+        if not os.path.isdir(profile_dir):
+            continue
+        meta_path = os.path.join(profile_dir, "profile.json")
+        if not os.path.exists(meta_path):
+            continue
+        try:
+            with open(meta_path, "r") as f:
+                meta = json.load(f)
+            meta["id"] = entry
+            profiles.append(meta)
+        except (json.JSONDecodeError, OSError):
+            pass
+    profiles.sort(key=lambda x: x.get("created", ""), reverse=True)
+    return profiles
 
 
 # ---------------------------------------------------------------------------
@@ -708,7 +797,7 @@ def _download_file_with_progress(url: str, dest_path: str, queue: Queue, label: 
     """Download a file from URL, pushing SSE progress events to a queue."""
     tmp_path = dest_path + ".tmp"
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "KokoroTTS-Studio/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "TadaTTS-Studio/1.0"})
         with urllib.request.urlopen(req, timeout=60) as response:
             total = int(response.headers.get("Content-Length", 0))
             downloaded = 0
@@ -767,7 +856,17 @@ def index():
 # --- Health ---
 @app.route("/api/health")
 def health():
-    return jsonify({"status": "ok", "port": request.host.split(":")[-1], "ffmpeg": _find_ffmpeg() is not None, "alignment": _check_alignment_available(), "enhance": _check_enhance_available(), "vad": _check_vad_available()})
+    gpu_info = _check_gpu_info()
+    return jsonify({
+        "status": "ok",
+        "port": request.host.split(":")[-1],
+        "ffmpeg": _find_ffmpeg() is not None,
+        "alignment": _check_alignment_available(),
+        "enhance": _check_enhance_available(),
+        "vad": _check_vad_available(),
+        "device": _get_device(),
+        "gpu": gpu_info,
+    })
 
 
 # --- Normalize text ---
@@ -797,19 +896,116 @@ def normalize_text():
     return jsonify({"original": text, "normalized": formatted})
 
 
+# --- Device ---
+@app.route("/api/device", methods=["GET"])
+def get_device():
+    gpu_info = _check_gpu_info()
+    return jsonify({"device": _get_device(), "gpu": gpu_info})
+
+
+@app.route("/api/device", methods=["POST"])
+def set_device():
+    data = request.get_json(force=True)
+    device = data.get("device", "cpu")
+    _set_device(device)
+    return jsonify({"device": _get_device()})
+
+
 # --- Models ---
 @app.route("/api/models")
 def models():
     out = []
     for mid, m in MODELS.items():
-        out.append({"id": mid, "name": m["name"], "size": m["size"]})
+        out.append({
+            "id": mid, "name": m["name"], "size": m["size"],
+            "params": m["params"], "languages": m["languages"],
+        })
     return jsonify(out)
 
 
-# --- Voices ---
+# --- Voices (voice profiles) ---
 @app.route("/api/voices")
 def voices():
-    return jsonify(VOICES)
+    return jsonify(_list_voice_profiles())
+
+
+@app.route("/api/voices/upload", methods=["POST"])
+def upload_voice():
+    """Upload a reference audio + transcript to create a voice profile."""
+    if "audio" not in request.files:
+        return jsonify({"error": "No audio file provided"}), 400
+
+    audio_file = request.files["audio"]
+    name = request.form.get("name", "").strip()
+    transcript = request.form.get("transcript", "").strip()
+
+    if not name:
+        name = os.path.splitext(audio_file.filename)[0][:40]
+
+    ext = os.path.splitext(audio_file.filename)[1].lower()
+    if ext not in (".wav", ".mp3", ".flac", ".ogg"):
+        return jsonify({"error": f"Unsupported format: {ext}"}), 400
+
+    # Create profile directory
+    safe_name = re.sub(r'[^a-zA-Z0-9]+', '-', name[:40].lower()).strip('-')
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    voice_id = f"{safe_name}_{timestamp}"
+    profile_dir = os.path.join(VOICES_DIR, voice_id)
+    os.makedirs(profile_dir, exist_ok=True)
+
+    # Save audio
+    audio_filename = f"reference{ext}"
+    audio_path = os.path.join(profile_dir, audio_filename)
+    audio_file.save(audio_path)
+
+    # Convert to WAV if needed
+    if ext != ".wav":
+        ffmpeg = _find_ffmpeg()
+        if ffmpeg:
+            wav_path = os.path.join(profile_dir, "reference.wav")
+            result = subprocess.run(
+                [ffmpeg, "-nostdin", "-y", "-i", audio_path, "-ar", "24000", "-ac", "1", wav_path],
+                capture_output=True, timeout=60,
+            )
+            if result.returncode == 0:
+                audio_filename = "reference.wav"
+
+    # Save profile metadata
+    profile = {
+        "name": name,
+        "audio_file": audio_filename,
+        "transcript": transcript,
+        "original_filename": audio_file.filename,
+        "created": datetime.now().isoformat(timespec="seconds"),
+    }
+    with open(os.path.join(profile_dir, "profile.json"), "w") as f:
+        json.dump(profile, f, indent=2)
+
+    profile["id"] = voice_id
+    logger.success("Voice profile created: {} ({})", name, voice_id)
+    return jsonify(profile)
+
+
+@app.route("/api/voices/<voice_id>", methods=["DELETE"])
+def delete_voice(voice_id):
+    voice_id = os.path.basename(voice_id)
+    profile_dir = os.path.join(VOICES_DIR, voice_id)
+    if os.path.isdir(profile_dir):
+        shutil.rmtree(profile_dir)
+        return jsonify({"status": "deleted", "id": voice_id})
+    return jsonify({"error": "Voice not found"}), 404
+
+
+@app.route("/api/voices/<voice_id>/audio")
+def serve_voice_audio(voice_id):
+    voice_id = os.path.basename(voice_id)
+    profile_dir = os.path.join(VOICES_DIR, voice_id)
+    meta_path = os.path.join(profile_dir, "profile.json")
+    if not os.path.exists(meta_path):
+        return jsonify({"error": "Voice not found"}), 404
+    with open(meta_path, "r") as f:
+        meta = json.load(f)
+    return send_from_directory(profile_dir, meta.get("audio_file", "reference.wav"))
 
 
 # --- Model status ---
@@ -817,7 +1013,7 @@ def voices():
 def model_status(model_id):
     if model_id not in MODELS:
         return jsonify({"error": "Unknown model"}), 404
-    cached = _model_files_present()
+    cached = _model_files_present(model_id)
     return jsonify({"model_id": model_id, "cached": cached})
 
 
@@ -829,64 +1025,51 @@ def download_model(model_id):
 
     model_cfg = MODELS[model_id]
 
-    def _stream_download(url, dest, q, label):
-        """Start download in thread, yield SSE events as they arrive."""
-        result = {}
-
-        def _run():
-            try:
-                _download_file_with_progress(url, dest, q, label)
-            except Exception as e:
-                logger.error("Download failed for {}: {}", label, e)
-                result["error"] = e
-
-        t = threading.Thread(target=_run)
-        t.start()
-        while t.is_alive():
-            t.join(timeout=0.15)
-            while not q.empty():
-                yield f"data: {json.dumps(q.get())}\n\n"
-        while not q.empty():
-            yield f"data: {json.dumps(q.get())}\n\n"
-        if "error" in result:
-            raise result["error"]
-
     def stream():
-        q = Queue()
         yield f"data: {json.dumps({'phase': 'checking', 'model': model_id})}\n\n"
 
         try:
-            onnx_path = os.path.join(MODELS_DIR, model_cfg["onnx_file"])
-            voices_path = os.path.join(MODELS_DIR, model_cfg["voices_file"])
-
-            # Step 1: download ONNX model if not present
-            if not os.path.isfile(onnx_path):
-                for event in _stream_download(model_cfg["onnx_url"], onnx_path, q, model_cfg["onnx_file"]):
-                    yield event
-
-            # Step 2: download voices if not present
-            if not os.path.isfile(voices_path):
-                for event in _stream_download(model_cfg["voices_url"], voices_path, q, model_cfg["voices_file"]):
-                    yield event
-
-            # Step 3: load model into memory (in background thread to keep SSE alive)
-            yield f"data: {json.dumps({'phase': 'loading', 'message': 'Loading model...'})}\n\n"
+            # Step 1: Download encoder from HuggingFace
+            yield f"data: {json.dumps({'phase': 'downloading', 'file': 'TADA Encoder', 'progress': 0, 'speed': 'downloading from HuggingFace...'})}\n\n"
             load_result = {}
 
-            def _load():
+            def _download_encoder():
                 try:
-                    load_model()
+                    load_encoder()
                 except Exception as e:
                     load_result["error"] = e
 
-            t = threading.Thread(target=_load)
+            t = threading.Thread(target=_download_encoder)
             t.start()
+            tick = 0
             while t.is_alive():
-                t.join(timeout=1.0)
-                # Send keepalive to prevent connection timeout
-                yield f"data: {json.dumps({'phase': 'loading', 'message': 'Loading model...'})}\n\n"
+                t.join(timeout=2.0)
+                tick += 1
+                yield f"data: {json.dumps({'phase': 'downloading', 'file': 'TADA Encoder', 'progress': min(90, tick * 5), 'speed': 'downloading from HuggingFace...'})}\n\n"
             if "error" in load_result:
                 raise load_result["error"]
+            yield f"data: {json.dumps({'phase': 'downloading', 'file': 'TADA Encoder', 'progress': 100, 'speed': 'complete'})}\n\n"
+
+            # Step 2: Download and load TADA model
+            yield f"data: {json.dumps({'phase': 'downloading', 'file': model_cfg['name'], 'progress': 0, 'speed': 'downloading from HuggingFace...'})}\n\n"
+            load_result = {}
+
+            def _download_model():
+                try:
+                    load_model(model_id)
+                except Exception as e:
+                    load_result["error"] = e
+
+            t = threading.Thread(target=_download_model)
+            t.start()
+            tick = 0
+            while t.is_alive():
+                t.join(timeout=2.0)
+                tick += 1
+                yield f"data: {json.dumps({'phase': 'downloading', 'file': model_cfg['name'], 'progress': min(90, tick * 3), 'speed': 'downloading from HuggingFace...'})}\n\n"
+            if "error" in load_result:
+                raise load_result["error"]
+            yield f"data: {json.dumps({'phase': 'downloading', 'file': model_cfg['name'], 'progress': 100, 'speed': 'complete'})}\n\n"
 
             yield f"data: {json.dumps({'phase': 'ready', 'message': 'Model ready'})}\n\n"
 
@@ -907,18 +1090,17 @@ def download_model(model_id):
 
 # --- Chunked generation background worker ---
 
-def _background_chunked_generate(job_id, voice_param, voice_name, sentences, speed,
-                                  max_silence_ms, prompt, basename,
-                                  voice_for_metadata=None, blend_meta=None):
+def _background_chunked_generate(job_id, voice_id, voice_prompt, sentences, speed,
+                                  max_silence_ms, prompt, basename, model_id,
+                                  voice_name=None, skip_enhance=False, skip_clean=False):
     """Generate audio for each sentence chunk, concatenate, loudnorm, and save."""
     with generation_jobs_lock:
         job = generation_jobs[job_id]
     q = job["queue"]
-    if voice_for_metadata is None:
-        voice_for_metadata = voice_name
     try:
-        kokoro = load_model()
-        lang = _voice_to_lang(voice_name)
+        import torch
+        import torchaudio
+        model = load_model(model_id)
 
         audio_chunks = []
         total = len(sentences)
@@ -937,7 +1119,8 @@ def _background_chunked_generate(job_id, voice_param, voice_name, sentences, spe
 
             start = time.perf_counter()
             with generation_inference_lock:
-                chunk_audio, _sr = kokoro.create(text=block, voice=voice_param, speed=speed, lang=lang)
+                output = model.generate(prompt=voice_prompt, text=block)
+                chunk_audio = output.audio[0].cpu().numpy()
             elapsed = time.perf_counter() - start
             total_inference += elapsed
             audio_chunks.append(chunk_audio)
@@ -966,13 +1149,16 @@ def _background_chunked_generate(job_id, voice_param, voice_name, sentences, spe
         words = len(clean_prompt.split())
         approx_tokens = int(words * 1.3)
 
+        cfg = MODELS.get(model_id, MODELS["tada-1b"])
         metadata = {
             "filename": basename + ".wav",
             "folder": basename,
             "prompt": clean_prompt,
-            "model": "kokoro-v1.0",
-            "model_id": "kokoro",
-            "voice": voice_for_metadata,
+            "model": cfg["name"],
+            "model_id": model_id,
+            "voice": voice_name or voice_id,
+            "voice_id": voice_id,
+            "device": _get_device(),
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "inference_time": round(total_inference, 3),
             "rtf": round(rtf, 4),
@@ -985,21 +1171,21 @@ def _background_chunked_generate(job_id, voice_param, voice_name, sentences, spe
             "chunked": True,
             "num_chunks": total,
         }
-        if blend_meta:
-            metadata["blend"] = blend_meta
         # Set post-processing statuses before writing to disk
         metadata["alignment_status"] = "pending" if _check_alignment_available() else "unavailable"
-        metadata["enhance_status"] = "pending" if _check_enhance_available() else "unavailable"
-        metadata["vad_status"] = "pending" if _check_vad_available() else "unavailable"
+        metadata["enhance_status"] = "skipped" if skip_enhance else ("pending" if _check_enhance_available() else "unavailable")
+        metadata["vad_status"] = "skipped" if skip_clean else ("pending" if _check_vad_available() else "unavailable")
         json_path = os.path.join(job_dir, basename + ".json")
         with open(json_path, "w") as f:
             json.dump(metadata, f, indent=2)
 
-        # Now kick off background post-processing
+        # Now kick off background post-processing (respecting skip flags)
         _start_alignment(basename)
-        _start_enhancement(basename)
-        if not _check_enhance_available():
-            _start_vad(basename, max_silence_ms)
+        if not skip_enhance:
+            _start_enhancement(basename)
+        if not skip_clean:
+            if skip_enhance or not _check_enhance_available():
+                _start_vad(basename, max_silence_ms)
 
         q.put({"phase": "done", "metadata": metadata})
         with generation_jobs_lock:
@@ -1027,50 +1213,36 @@ def _cleanup_old_jobs(max_age_s=300):
 @app.route("/api/generate", methods=["POST"])
 def generate():
     data = request.get_json()
-    model_id = data.get("model", "kokoro")
-    voice = data.get("voice", "af_bella")
+    model_id = data.get("model", "tada-1b")
+    voice_id = data.get("voice", "")
     prompt = data.get("prompt", "")
     speed = float(data.get("speed", 1.0))
     speed = max(0.5, min(2.0, speed))  # clamp to 0.5–2.0
     max_silence_ms = int(data.get("max_silence_ms", 500))
     max_silence_ms = max(200, min(1000, max_silence_ms))  # clamp to 200–1000
-    blend = data.get("blend")  # optional: {voice_a, voice_b, ratio, method}
+    skip_enhance = data.get("skip_enhance", False)
+    skip_clean = data.get("skip_clean", False)
 
     if not prompt.strip():
         return jsonify({"error": "Prompt is required"}), 400
     if model_id not in MODELS:
         return jsonify({"error": "Unknown model"}), 404
+    if not voice_id:
+        return jsonify({"error": "Voice profile is required. Upload a reference audio first."}), 400
 
-    # Resolve voice: single string or blended embedding
-    voice_for_metadata = voice
-    voice_param = voice  # what gets passed to kokoro.create()
-    blend_meta = None
+    # Load voice profile
+    voice_prompt = _load_voice_profile(voice_id)
+    if voice_prompt is None:
+        return jsonify({"error": f"Voice profile not found: {voice_id}"}), 404
 
-    if blend:
-        voice_a = blend.get("voice_a", "")
-        voice_b = blend.get("voice_b", "")
-        ratio = float(blend.get("ratio", 0.5))
-        ratio = max(0.0, min(1.0, ratio))
-        method = blend.get("method", "slerp")
-        if method not in ("slerp", "lerp"):
-            method = "slerp"
-        if voice_a not in VOICES:
-            return jsonify({"error": f"Unknown voice_a: {voice_a}"}), 400
-        if voice_b not in VOICES:
-            return jsonify({"error": f"Unknown voice_b: {voice_b}"}), 400
+    # Get voice name for metadata
+    voice_name = voice_id
+    profile_meta_path = os.path.join(VOICES_DIR, voice_id, "profile.json")
+    if os.path.exists(profile_meta_path):
+        with open(profile_meta_path) as f:
+            voice_name = json.load(f).get("name", voice_id)
 
-        kokoro_inst = load_model()
-        voice_param = _blend_voices(kokoro_inst, voice_a, voice_b, ratio, method)
-        pct = int(round(ratio * 100))
-        voice_for_metadata = f"{voice_a} + {voice_b} ({pct}% {method.upper()})"
-        voice = voice_a  # used for lang derivation
-        blend_meta = {"voice_a": voice_a, "voice_b": voice_b,
-                      "ratio": ratio, "method": method}
-    else:
-        if voice not in VOICES:
-            return jsonify({"error": f"Unknown voice. Choose from: {VOICES}"}), 400
-
-    # Reject if another generation or stream is already running (prevents OOM from concurrent ONNX)
+    # Reject if another generation or stream is already running
     if _stream_active.is_set():
         return jsonify({"error": "A stream is already in progress. Please wait."}), 429
     with generation_jobs_lock:
@@ -1078,61 +1250,33 @@ def generate():
             if job.get("status") == "running":
                 return jsonify({"error": "A generation is already in progress. Please wait or abort."}), 429
 
-    kokoro = load_model()
-    logger.info("Generate  \033[1m{}\033[0m | {} | {} chars", model_id, voice_for_metadata, len(prompt))
+    tada = load_model(model_id)
+    logger.info("Generate  \033[1m{}\033[0m | {} | {} chars", model_id, voice_name, len(prompt))
 
-    # If text is already bracket-formatted [block1]\n\n[block2], use those blocks directly
+    # Clean the prompt text (strip markdown, URLs, brackets, whitespace)
     pre_blocks = re.findall(r'\[([^\[\]]+)\]', prompt)
-    if pre_blocks and len(pre_blocks) >= 2:
-        # Already formatted — clean each block individually (strip markdown/URLs, NOT brackets)
-        blocks = []
+    if pre_blocks:
+        # Strip brackets, join all blocks into one continuous text
+        cleaned_parts = []
         for b in pre_blocks:
             cleaned = re.sub(r"[*_#`~]", "", b)
             cleaned = re.sub(r"https?://\S+", "link", cleaned)
             cleaned = re.sub(r"\s+", " ", cleaned).strip()
             if cleaned:
-                blocks.append(cleaned)
-        tts_prompt = " ".join(blocks)
+                cleaned_parts.append(cleaned)
+        tts_prompt = " ".join(cleaned_parts)
     else:
         tts_prompt = clean_for_tts(prompt)
-        blocks = tts_breathing_blocks(tts_prompt)
 
-    # --- Multi-block: chunked background generation with SSE progress ---
-    if len(blocks) > 1:
-        _cleanup_old_jobs()
-        job_id = uuid.uuid4().hex[:12]
-        basename = generate_filename(prompt)
-        with generation_jobs_lock:
-            generation_jobs[job_id] = {
-                "queue": Queue(),
-                "status": "running",
-                "metadata": None,
-                "created": time.time(),
-                "abort": False,
-            }
-        t = threading.Thread(
-            target=_background_chunked_generate,
-            args=(job_id, voice_param, voice, blocks, speed,
-                  max_silence_ms, prompt, basename, voice_for_metadata,
-                  blend_meta),
-            daemon=True,
-        )
-        t.start()
-        return jsonify({
-            "job_id": job_id,
-            "status": "chunking",
-            "total_chunks": len(blocks),
-            "sentences": blocks,
-        }), 202
-
-    # --- Single block: synchronous fast path ---
+    # --- Send the whole text as one block to TADA (no chunk splitting) ---
+    import torch
     _cleanup_old_jobs()
-    single_block = blocks[0] if blocks else tts_prompt
-    lang = _voice_to_lang(voice)
+    single_block = tts_prompt
     start = time.perf_counter()
     try:
         with generation_inference_lock:
-            audio, _sr = kokoro.create(text=single_block, voice=voice_param, speed=speed, lang=lang)
+            output = tada.generate(prompt=voice_prompt, text=single_block)
+            audio = output.audio[0].cpu().numpy()
     except Exception as e:
         logger.exception("TTS inference failed")
         return jsonify({"error": f"Generation failed: {e}"}), 500
@@ -1153,13 +1297,16 @@ def generate():
     logger.success("Generated  {:.1f}s audio in {:.2f}s | RTF {:.2f}", duration_generated, inference_time, rtf)
 
     clean_prompt = re.sub(r'[\[\]]', '', prompt).strip()
+    cfg = MODELS.get(model_id, MODELS["tada-1b"])
     metadata = {
         "filename": wav_name,
         "folder": basename,
         "prompt": clean_prompt,
-        "model": "kokoro-v1.0",
-        "model_id": "kokoro",
-        "voice": voice_for_metadata,
+        "model": cfg["name"],
+        "model_id": model_id,
+        "voice": voice_name,
+        "voice_id": voice_id,
+        "device": _get_device(),
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "inference_time": round(inference_time, 3),
         "rtf": round(rtf, 4),
@@ -1170,20 +1317,24 @@ def generate():
         "words": len(clean_prompt.split()),
         "approx_tokens": int(len(clean_prompt.split()) * 1.3),
     }
-    if blend_meta:
-        metadata["blend"] = blend_meta
     with open(os.path.join(job_dir, json_name), "w") as f:
         json.dump(metadata, f, indent=2)
 
-    # Kick off background alignment and enhancement
+    # Kick off background alignment and post-processing (respecting skip flags)
     _start_alignment(basename)
     metadata["alignment_status"] = "pending" if _check_alignment_available() else "unavailable"
-    _start_enhancement(basename)
-    metadata["enhance_status"] = "pending" if _check_enhance_available() else "unavailable"
-    # VAD is chained from enhancement; if enhance unavailable, start VAD directly
-    if not _check_enhance_available():
-        _start_vad(basename, max_silence_ms)
-    metadata["vad_status"] = "pending" if _check_vad_available() else "unavailable"
+    if not skip_enhance:
+        _start_enhancement(basename)
+        metadata["enhance_status"] = "pending" if _check_enhance_available() else "unavailable"
+    else:
+        metadata["enhance_status"] = "skipped"
+    if not skip_clean:
+        # VAD is chained from enhancement; if enhance unavailable/skipped, start VAD directly
+        if skip_enhance or not _check_enhance_available():
+            _start_vad(basename, max_silence_ms)
+        metadata["vad_status"] = "pending" if _check_vad_available() else "unavailable"
+    else:
+        metadata["vad_status"] = "skipped"
 
     return jsonify(metadata)
 
@@ -1256,43 +1407,30 @@ _stream_active = threading.Event()
 
 @app.route("/api/stream", methods=["POST"])
 def stream_audio():
-    """Stream TTS audio chunk-by-chunk via SSE using kokoro.create_stream().
+    """Stream TTS audio via SSE using TADA generate().
 
-    Each sentence is generated and sent as a base64-encoded float32 PCM chunk.
+    TADA doesn't support native streaming, so we split text into sentences,
+    generate each, and send as base64-encoded float32 PCM chunks.
     Nothing is saved to disk — this is listen-only mode.
     """
     data = request.get_json()
-    model_id = data.get("model", "kokoro")
-    voice = data.get("voice", "af_bella")
+    model_id = data.get("model", "tada-1b")
+    voice_id = data.get("voice", "")
     prompt = data.get("prompt", "")
     speed = float(data.get("speed", 1.0))
     speed = max(0.5, min(2.0, speed))
-    blend = data.get("blend")
 
     if not prompt.strip():
         return jsonify({"error": "Prompt is required"}), 400
     if model_id not in MODELS:
         return jsonify({"error": "Unknown model"}), 404
+    if not voice_id:
+        return jsonify({"error": "Voice profile is required."}), 400
 
-    # Resolve voice
-    voice_param = voice
-    if blend:
-        voice_a = blend.get("voice_a", "")
-        voice_b = blend.get("voice_b", "")
-        ratio = max(0.0, min(1.0, float(blend.get("ratio", 0.5))))
-        method = blend.get("method", "slerp")
-        if method not in ("slerp", "lerp"):
-            method = "slerp"
-        if voice_a not in VOICES:
-            return jsonify({"error": f"Unknown voice_a: {voice_a}"}), 400
-        if voice_b not in VOICES:
-            return jsonify({"error": f"Unknown voice_b: {voice_b}"}), 400
-        kokoro_inst = load_model()
-        voice_param = _blend_voices(kokoro_inst, voice_a, voice_b, ratio, method)
-        voice = voice_a
-    else:
-        if voice not in VOICES:
-            return jsonify({"error": f"Unknown voice. Choose from: {VOICES}"}), 400
+    # Load voice profile
+    voice_prompt = _load_voice_profile(voice_id)
+    if voice_prompt is None:
+        return jsonify({"error": f"Voice profile not found: {voice_id}"}), 404
 
     # Reject if another generation/stream is already running
     with generation_jobs_lock:
@@ -1302,35 +1440,26 @@ def stream_audio():
     if _stream_active.is_set():
         return jsonify({"error": "A stream is already in progress."}), 429
 
-    kokoro = load_model()
-    lang = _voice_to_lang(voice)
+    tada = load_model(model_id)
     tts_prompt = clean_for_tts(prompt)
 
-    logger.info("Stream  \033[1m{}\033[0m | {} | {} chars", model_id, voice, len(prompt))
+    logger.info("Stream  \033[1m{}\033[0m | {} | {} chars", model_id, voice_id, len(prompt))
 
-    # Produce audio chunks on a background thread via asyncio event loop + Queue
     q = Queue()
 
     def _run_stream():
+        import torch
         _stream_active.set()
-        loop = asyncio.new_event_loop()
         try:
-            async def _produce():
-                with generation_inference_lock:
-                    stream = kokoro.create_stream(
-                        text=tts_prompt, voice=voice_param,
-                        speed=speed, lang=lang,
-                    )
-                    async for samples, sr in stream:
-                        q.put(("audio", samples, sr))
-                q.put(("done", None, None))
-
-            loop.run_until_complete(_produce())
+            with generation_inference_lock:
+                output = tada.generate(prompt=voice_prompt, text=tts_prompt)
+                audio = output.audio[0].cpu().numpy().astype(np.float32)
+            q.put(("audio", audio, 24000))
+            q.put(("done", None, None))
         except Exception as exc:
             logger.exception("Stream generation failed")
             q.put(("error", str(exc), None))
         finally:
-            loop.close()
             _stream_active.clear()
 
     t = threading.Thread(target=_run_stream, daemon=True)
@@ -1340,13 +1469,13 @@ def stream_audio():
         chunk_num = 0
         while True:
             try:
-                kind, payload, sr = q.get(timeout=60)
+                kind, payload, sr = q.get(timeout=120)
             except Exception:
                 yield f"data: {json.dumps({'phase': 'error', 'message': 'Stream timed out'})}\n\n"
                 break
             if kind == "audio":
                 chunk_num += 1
-                pcm_bytes = payload.astype(np.float32).tobytes()
+                pcm_bytes = payload.tobytes()
                 b64 = base64.b64encode(pcm_bytes).decode("ascii")
                 yield f"data: {json.dumps({'phase': 'audio', 'chunk': chunk_num, 'samples': b64, 'sample_rate': sr})}\n\n"
             elif kind == "done":
@@ -1864,7 +1993,7 @@ def _run_alignment(wav_path, prompt_text):
         audio, sr = sf.read(wav_path, dtype="float32")
         if audio.ndim > 1:
             audio = audio.mean(axis=1)
-        # Whisper expects 16kHz — resample if needed (Kokoro outputs 24kHz)
+        # Whisper expects 16kHz — resample if needed (TADA outputs 24kHz)
         if sr != 16000:
             target_len = int(len(audio) * 16000 / sr)
             audio = np.interp(
@@ -2556,17 +2685,25 @@ def serve_audio(filename):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Kokoro TTS Studio Backend")
+    parser = argparse.ArgumentParser(description="TADA TTS Studio Backend")
     parser.add_argument("--port", type=int, default=0, help="Port to listen on")
     args = parser.parse_args()
 
     port = args.port if args.port else find_available_port(5000)
 
+    # Auto-detect GPU
+    gpu_info = _check_gpu_info()
+    if gpu_info["available"]:
+        logger.info("GPU detected: {} ({} MB VRAM)", gpu_info["name"], gpu_info["vram_mb"])
+
     # Startup banner
+    profiles = _list_voice_profiles()
     print()
-    print(f"  \033[1mKokoro TTS Studio\033[0m")
+    print(f"  \033[1mTADA TTS Studio\033[0m")
     print(f"  \033[92m>\033[0m http://localhost:{port}")
-    print(f"  \033[90m-\033[0m Voices: {len(VOICES)} available")
+    print(f"  \033[90m-\033[0m Models: TADA-1B, TADA-3B-ml")
+    print(f"  \033[90m-\033[0m Voice profiles: {len(profiles)}")
+    print(f"  \033[90m-\033[0m Device: {_get_device()}" + (f" ({gpu_info['name']})" if gpu_info["available"] else ""))
     print()
 
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)

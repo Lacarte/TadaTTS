@@ -2,9 +2,9 @@
 :: Change to the directory where this script lives
 cd /d "%~dp0"
 
-echo Setting up Kokoro TTS Studio...
+echo Setting up TADA TTS Studio...
 
-:: If venv already exists, skip Python install entirely
+:: If venv already exists, skip Python setup entirely
 if exist venv\Scripts\python.exe (
     echo Existing venv found, skipping Python setup.
     goto :install_deps

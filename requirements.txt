@@ -1,4 +1,4 @@
-kokoro-onnx
+hume-tada
 flask
 flask-cors
 loguru
