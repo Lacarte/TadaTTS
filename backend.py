@@ -1011,7 +1011,7 @@ def serve_voice_audio(voice_id):
 
 
 # --- Sample voices (presets) ---
-@app.route("/api/sample-voices")
+@app.route("/api/samplevoices")
 def list_sample_voices():
     """List all sample voice files organized by language subfolder."""
     samples = []
@@ -1044,7 +1044,7 @@ def list_sample_voices():
     return jsonify(samples)
 
 
-@app.route("/api/sample-voices/<path:filepath>")
+@app.route("/api/sample-voices/file/<path:filepath>")
 def serve_sample_voice(filepath):
     """Serve a sample voice audio file."""
     return send_from_directory(SAMPLE_VOICES_DIR, filepath)

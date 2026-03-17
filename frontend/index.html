@@ -3085,7 +3085,7 @@
 
     async function loadSampleVoices() {
       try {
-        _sampleVoices = await api('/api/sample-voices');
+        _sampleVoices = await api('/api/samplevoices');
         console.log('Sample voices loaded:', _sampleVoices.length);
         renderSampleVoices();
       } catch (e) { console.error('Failed to load sample voices:', e); _sampleVoices = []; }
