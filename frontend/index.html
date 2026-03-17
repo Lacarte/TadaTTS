@@ -3086,8 +3086,9 @@
     async function loadSampleVoices() {
       try {
         _sampleVoices = await api('/api/sample-voices');
+        console.log('Sample voices loaded:', _sampleVoices.length);
         renderSampleVoices();
-      } catch { _sampleVoices = []; }
+      } catch (e) { console.error('Failed to load sample voices:', e); _sampleVoices = []; }
     }
 
     function renderSampleVoices() {
@@ -3339,10 +3340,7 @@
       });
     }
 
-    function renderVoices() {
-      renderLangTabs();
-      renderVoiceGrid();
-    }
+    /* renderVoices defined earlier — old Kokoro version removed */
 
     function selectVoice(v) {
       STATE.selectedVoice = v;
