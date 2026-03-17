@@ -3092,30 +3092,47 @@
 
     function renderSampleVoices() {
       const list = $('#sample-voices-list');
-      if (!list || !_sampleVoices.length) return;
+      if (!list || !_sampleVoices.length) {
+        if (list) list.innerHTML = '<p style="color:var(--text-muted);font-size:10px;padding:4px 0">No sample voices found. Add audio files to sample voices/&lt;lang&gt;/ folder.</p>';
+        return;
+      }
       // Check which samples are already loaded as profiles
       const existingFiles = new Set(STATE.voiceProfiles.filter(p => p.source === 'sample').map(p => (p.original_filename || '').toLowerCase()));
+      // Group by language
+      const byLang = {};
+      _sampleVoices.forEach(s => { (byLang[s.lang] = byLang[s.lang] || []).push(s); });
       list.innerHTML = '';
-      _sampleVoices.forEach((s, i) => {
-        const loaded = existingFiles.has(s.file.toLowerCase());
-        const btn = document.createElement('button');
-        btn.title = loaded ? `${s.name} (already loaded)` : s.name;
-        btn.textContent = (loaded ? '\u2713 ' : '') + s.name;
-        btn.style.cssText = `padding:4px 10px;border-radius:6px;border:1px solid ${loaded ? 'var(--accent)' : 'var(--border)'};
-          background:${loaded ? 'rgba(78,205,196,0.08)' : 'var(--bg-darkest)'};color:${loaded ? 'var(--accent)' : 'var(--text-secondary)'};
-          font-size:10px;font-weight:500;font-family:inherit;cursor:${loaded ? 'default' : 'pointer'};
-          transition:all 0.2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;opacity:${loaded ? '0.7' : '1'}`;
-        if (!loaded) {
-          btn.onmouseover = () => { btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent)'; };
-          btn.onmouseout = () => { btn.style.borderColor = 'var(--border)'; btn.style.color = 'var(--text-secondary)'; };
-          btn.onclick = async () => {
-            btn.disabled = true; btn.textContent = '...';
-            await useSampleVoice(s.path, s.name);
-            renderSampleVoices(); // refresh to show checkmark
-          };
+      const langNames = { en:'English', es:'Spanish', fr:'French', de:'German', it:'Italian', ja:'Japanese', zh:'Chinese', pt:'Portuguese', ar:'Arabic', pl:'Polish' };
+      for (const [lang, voices] of Object.entries(byLang).sort()) {
+        // Language header
+        if (Object.keys(byLang).length > 1) {
+          const hdr = document.createElement('div');
+          hdr.style.cssText = 'width:100%;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-top:6px;margin-bottom:2px';
+          hdr.textContent = `${langNames[lang] || lang} (${lang})`;
+          list.appendChild(hdr);
         }
-        list.appendChild(btn);
-      });
+        voices.forEach(s => {
+          const loaded = existingFiles.has(s.file.toLowerCase());
+          const btn = document.createElement('button');
+          btn.title = loaded ? `${s.name} (already loaded)` : `${s.name} [${lang}]`;
+          btn.innerHTML = (loaded ? '<span style="color:var(--accent)">\u2713</span> ' : '') +
+            `<span style="font-size:8px;font-weight:700;opacity:0.5;margin-right:3px">${lang.toUpperCase()}</span>${s.name}`;
+          btn.style.cssText = `display:inline-flex;align-items:center;padding:4px 10px;border-radius:6px;border:1px solid ${loaded ? 'var(--accent)' : 'var(--border)'};
+            background:${loaded ? 'rgba(78,205,196,0.08)' : 'var(--bg-darkest)'};color:${loaded ? 'var(--accent)' : 'var(--text-secondary)'};
+            font-size:10px;font-weight:500;font-family:inherit;cursor:${loaded ? 'default' : 'pointer'};
+            transition:all 0.2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;opacity:${loaded ? '0.7' : '1'}`;
+          if (!loaded) {
+            btn.onmouseover = () => { btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent)'; };
+            btn.onmouseout = () => { btn.style.borderColor = 'var(--border)'; btn.style.color = 'var(--text-secondary)'; };
+            btn.onclick = async () => {
+              btn.disabled = true; btn.innerHTML = '...';
+              await useSampleVoice(s.path, s.name);
+              renderSampleVoices();
+            };
+          }
+          list.appendChild(btn);
+        });
+      }
     }
 
     function toggleSampleVoices() {
