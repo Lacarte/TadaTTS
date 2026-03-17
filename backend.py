@@ -701,7 +701,8 @@ def load_model(model_id=None):
 
     cfg = MODELS.get(model_id, MODELS["tada-1b"])
     device = _get_device()
-    dtype = torch.bfloat16 if device == "cuda" else torch.float32
+    # Use float16 on CPU (float32 OOMs on 3B model), bfloat16 on CUDA
+    dtype = torch.bfloat16 if device == "cuda" else torch.float16
 
     with tada_lock:
         if tada_model is None:
