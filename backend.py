@@ -72,6 +72,7 @@ TRASH_DIR = os.path.join(AUDIO_DIR, "TRASH")
 ALIGN_DIR = os.path.join(GENERATION_DIR, "force-alignment")
 ALIGN_TRASH_DIR = os.path.join(ALIGN_DIR, "TRASH")
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "frontend")
+SAMPLE_VOICES_DIR = os.path.join(os.path.dirname(__file__), "sample voices")
 os.makedirs(AUDIO_DIR, exist_ok=True)
 os.makedirs(TRASH_DIR, exist_ok=True)
 os.makedirs(ALIGN_DIR, exist_ok=True)
@@ -1007,6 +1008,104 @@ def serve_voice_audio(voice_id):
     with open(meta_path, "r") as f:
         meta = json.load(f)
     return send_from_directory(profile_dir, meta.get("audio_file", "reference.wav"))
+
+
+# --- Sample voices (presets) ---
+@app.route("/api/sample-voices")
+def list_sample_voices():
+    """List all sample voice files organized by language subfolder."""
+    samples = []
+    if not os.path.exists(SAMPLE_VOICES_DIR):
+        return jsonify(samples)
+    for lang_dir in sorted(os.listdir(SAMPLE_VOICES_DIR)):
+        lang_path = os.path.join(SAMPLE_VOICES_DIR, lang_dir)
+        if not os.path.isdir(lang_path):
+            continue
+        for fname in sorted(os.listdir(lang_path)):
+            if not fname.lower().endswith((".wav", ".mp3", ".flac", ".ogg")):
+                continue
+            # Derive a display name from filename
+            name = fname
+            for prefix in ("voice_preview_", "ElevenLabs_"):
+                if name.startswith(prefix):
+                    name = name[len(prefix):]
+            name = os.path.splitext(name)[0]
+            # Clean up timestamps and metadata suffixes
+            name = re.sub(r'\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}_?', '', name)
+            name = re.sub(r'_?(pre|pvc)_sp\d+.*$', '', name)
+            name = re.sub(r'\s*\(\d+\)\s*$', '', name)
+            name = name.strip(' _-')
+            samples.append({
+                "lang": lang_dir,
+                "file": fname,
+                "name": name or fname,
+                "path": f"{lang_dir}/{fname}",
+            })
+    return jsonify(samples)
+
+
+@app.route("/api/sample-voices/<path:filepath>")
+def serve_sample_voice(filepath):
+    """Serve a sample voice audio file."""
+    return send_from_directory(SAMPLE_VOICES_DIR, filepath)
+
+
+@app.route("/api/voices/from-sample", methods=["POST"])
+def create_voice_from_sample():
+    """Create a voice profile from a sample voice file."""
+    data = request.get_json(force=True)
+    sample_path = data.get("path", "")
+    name = data.get("name", "")
+    transcript = data.get("transcript", "")
+
+    if not sample_path:
+        return jsonify({"error": "No sample path provided"}), 400
+
+    src = os.path.join(SAMPLE_VOICES_DIR, sample_path)
+    if not os.path.isfile(src):
+        return jsonify({"error": "Sample file not found"}), 404
+
+    if not name:
+        name = os.path.splitext(os.path.basename(sample_path))[0][:40]
+
+    ext = os.path.splitext(sample_path)[1].lower()
+    safe_name = re.sub(r'[^a-zA-Z0-9]+', '-', name[:40].lower()).strip('-')
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    voice_id = f"{safe_name}_{timestamp}"
+    profile_dir = os.path.join(VOICES_DIR, voice_id)
+    os.makedirs(profile_dir, exist_ok=True)
+
+    # Copy sample file
+    audio_filename = f"reference{ext}"
+    shutil.copy2(src, os.path.join(profile_dir, audio_filename))
+
+    # Convert to WAV if needed
+    if ext != ".wav":
+        ffmpeg = _find_ffmpeg()
+        if ffmpeg:
+            wav_path = os.path.join(profile_dir, "reference.wav")
+            result = subprocess.run(
+                [ffmpeg, "-nostdin", "-y", "-i", os.path.join(profile_dir, audio_filename),
+                 "-ar", "24000", "-ac", "1", wav_path],
+                capture_output=True, timeout=60,
+            )
+            if result.returncode == 0:
+                audio_filename = "reference.wav"
+
+    profile = {
+        "name": name,
+        "audio_file": audio_filename,
+        "transcript": transcript,
+        "original_filename": os.path.basename(sample_path),
+        "created": datetime.now().isoformat(timespec="seconds"),
+        "source": "sample",
+    }
+    with open(os.path.join(profile_dir, "profile.json"), "w") as f:
+        json.dump(profile, f, indent=2)
+
+    profile["id"] = voice_id
+    logger.success("Voice profile from sample: {} ({})", name, voice_id)
+    return jsonify(profile)
 
 
 # --- Model status ---

@@ -1928,10 +1928,19 @@
             </div>
           </div>
 
+          <!-- Sample Voices (Presets) -->
+          <div id="sample-voices-section" style="margin-bottom:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:8px" onclick="toggleSampleVoices()">
+              <label style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-muted);cursor:pointer">Sample Voices</label>
+              <svg id="sample-voices-chevron" width="10" height="10" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" style="transition:transform 0.2s"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div id="sample-voices-list" style="display:none;flex-wrap:wrap;gap:4px"></div>
+          </div>
+
           <!-- Voice Profiles List -->
           <div id="voice-profiles-list" style="display:flex;flex-direction:column;gap:6px">
             <p id="no-voices-msg" style="text-align:center;color:var(--text-muted);font-size:12px;padding:20px 0">
-              No voice profiles yet. Upload a reference audio to get started.
+              No voice profiles yet. Use a sample voice or upload your own.
             </p>
           </div>
 
@@ -2213,6 +2222,13 @@
                 style="padding:2px 8px;border-radius:5px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer">
                 &#x1F3B2; Random
               </button>
+              <div style="position:relative;display:inline-block">
+                <select id="text-preset-select" onchange="loadTextPreset(this.value)" class="hover-accent"
+                  style="padding:2px 8px;border-radius:5px;font-size:9px;font-weight:600;font-family:'JetBrains Mono',monospace;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;appearance:none;padding-right:16px">
+                  <option value="">Presets</option>
+                </select>
+                <svg style="position:absolute;right:4px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-muted)" width="6" height="6" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 2l2 2 2-2"/></svg>
+              </div>
             </div>
             <div class="flex items-center gap-1" style="color:var(--text-muted)">
               <kbd
@@ -2879,6 +2895,7 @@
         initStepToggles();
         setGenMode(STATE.genMode, true);
         loadAdvancedFromStorage();
+        populateTextPresets();
         buildEqualizer(); await loadHistory();
       } catch (e) { console.error('Init:', e); toast('Failed to connect to server', 'error'); }
     }
@@ -3030,7 +3047,95 @@
     function randomBlend() {} function renderBlendPickerTabs() {} function renderBlendPickerGrid() {}
     function buildVoiceGroups() { return {}; } function renderLangTabs() {}
     function selectLang() {} function renderVoiceGrid() {} function renderTopPicks() {}
-    function renderVoices() { renderVoiceProfiles(); }
+    function renderVoices() { renderVoiceProfiles(); loadSampleVoices(); }
+
+    // ======================================================================
+    // Sample Voices (Presets)
+    // ======================================================================
+    let _sampleVoices = [];
+
+    async function loadSampleVoices() {
+      try {
+        _sampleVoices = await api('/api/sample-voices');
+        renderSampleVoices();
+      } catch { _sampleVoices = []; }
+    }
+
+    function renderSampleVoices() {
+      const list = $('#sample-voices-list');
+      if (!list || !_sampleVoices.length) return;
+      list.innerHTML = _sampleVoices.map(s => `
+        <button onclick="useSampleVoice('${s.path.replace(/'/g, "\\'")}','${s.name.replace(/'/g, "\\'")}')"
+          title="${s.name}" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);
+          background:var(--bg-darkest);color:var(--text-secondary);font-size:10px;font-weight:500;
+          font-family:inherit;cursor:pointer;transition:all 0.2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px"
+          onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+          onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-secondary)'">${s.name}</button>
+      `).join('');
+    }
+
+    function toggleSampleVoices() {
+      const list = $('#sample-voices-list');
+      const chevron = $('#sample-voices-chevron');
+      const open = list.style.display === 'none';
+      list.style.display = open ? 'flex' : 'none';
+      chevron.style.transform = open ? 'rotate(180deg)' : '';
+    }
+
+    async function useSampleVoice(path, name) {
+      try {
+        const res = await fetch('/api/voices/from-sample', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path, name, transcript: '' }),
+        });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed'); }
+        const profile = await res.json();
+        STATE.voiceProfiles.unshift(profile);
+        STATE.selectedVoice = profile.id;
+        localStorage.setItem('tada-voice', profile.id);
+        renderVoiceProfiles();
+        toast(`Voice "${name}" added`);
+      } catch (e) { toast(e.message || 'Failed to add sample voice', 'error'); }
+    }
+
+    // ======================================================================
+    // Text Presets
+    // ======================================================================
+    const TEXT_PRESETS = {
+      'Narration': `She found the letter tucked inside a library book, dated nineteen fifty-two. "If you're reading this," it began, "then the maples outside must be enormous by now." She glanced out the window. The maples were enormous. She kept reading. "I buried something beneath the tallest one. Something that mattered to me once. I hope it matters to you too." She closed the book, grabbed her coat, and walked outside with a borrowed shovel.`,
+      'Amusement': `Seriously, um, where did you even find this? It's like you literally read my mind, you know? I'm just... I'm so lucky to have you around. I was just thinking the other day about how, like, I don't tell you enough how much I appreciate the little things you do. Like that time you brought me coffee when I was stuck at my desk for six hours straight, or the way you always know exactly what to say when I'm having a rough afternoon.`,
+      'Amazement': `I mean, how long have you been practicing? Like, your finger strength and that, uh, that vibrato you do is just insane. I've seen professionals play that same piece, but they didn't have the same... soul, I guess? It's like you're not even thinking about the notes anymore, you're just, you know, part of the instrument. It's honestly so inspiring to watch.`,
+      'Sadness': `I found his old jacket in the back of the closet today. I didn't mean to, I was just looking for a scarf. But then I pulled it out and it still, um, it still smells like him, you know? Like that aftershave he always wore. I just sat on the floor for a while, holding it. I know it sounds silly but sometimes, sometimes the smallest things hit you the hardest.`,
+      'News Report': `Good evening and thank you for joining us. In a remarkable turn of events, scientists at the European Space Agency have announced the discovery of what they're calling a "shadow biosphere" in the upper atmosphere. The finding, published today in Nature, suggests that microscopic organisms are thriving at altitudes previously thought inhospitable to life.`,
+      'Poetry': `Do not go gentle into that good night. Old age should burn and rave at close of day. Rage, rage against the dying of the light. Though wise men at their end know dark is right, because their words had forked no lightning they do not go gentle into that good night.`,
+      'Tutorial': `Welcome to today's lesson on making the perfect sourdough bread. First, you'll need a mature starter that's been fed within the last twelve hours. The key to a great sourdough is patience. You can't rush fermentation, and the flavor develops slowly over time. Let me walk you through each step, from autolyse to final bake.`,
+      'Dramatic': `The ship's captain spoke into the radio one final time. "This is the Aurora, signing off after thirty years of service. She's carried cargo to fourteen countries, weathered nine storms, and never once let her crew down." He paused, running his hand along the bridge console. "They'll scrap her hull and melt her steel. But steel doesn't forget the shape of a ship."`,
+      'Conversational': `So I was at the grocery store yesterday, right? And this guy in front of me has like forty items in the express lane. The sign literally says fifteen items or less. And the cashier just looks at me with this face like, what do you want me to do? And I'm standing there thinking, do I say something? Is this the hill I die on?`,
+      'Meditation': `Take a deep breath in through your nose. Hold it for a moment. And slowly release through your mouth. Feel the tension leaving your shoulders, your neck, your jaw. Let your body sink into the surface beneath you. There is nothing you need to do right now. Nowhere you need to be. Just this breath. Just this moment.`,
+    };
+
+    function populateTextPresets() {
+      const sel = $('#text-preset-select');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">Presets</option>';
+      for (const name of Object.keys(TEXT_PRESETS)) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      }
+    }
+
+    function loadTextPreset(name) {
+      if (!name || !TEXT_PRESETS[name]) return;
+      const ta = $('#prompt-input');
+      ta.value = TEXT_PRESETS[name];
+      ta.dispatchEvent(new Event('input'));
+      ta.focus();
+      $('#text-preset-select').value = '';
+      toast(`"${name}" preset loaded`);
+    }
 
     /* old voice/blend code removed — TADA uses voice profiles */
     if (false) { function _dead_renderVoiceGrid() {
