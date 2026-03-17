@@ -1891,39 +1891,6 @@
           <p class="text-sm mt-1" style="color:var(--text-secondary)">Transform text into natural speech</p>
         </div>
 
-        <!-- Model + Speed -->
-        <section class="card p-5 mb-4 reveal" style="animation-delay:0.04s">
-          <label class="block text-[10px] font-bold uppercase tracking-[0.15em] mb-2.5"
-            style="color:var(--text-muted)">Model</label>
-          <div class="flex items-center gap-3">
-            <div style="position:relative;flex:1">
-              <select id="model-select" class="input-field"
-                style="width:100%;padding:11px 14px;padding-right:90px;font-size:13px;font-weight:500">
-                <option value="tada-1b">TADA 1B — English</option>
-                <option value="tada-3b">TADA 3B — Multilingual</option>
-              </select>
-              <span id="model-size" class="font-mono"
-                style="position:absolute;right:32px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:600;color:var(--accent);background:rgba(78,205,196,0.1);padding:2px 7px;border-radius:5px">~4GB</span>
-              <svg
-                style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-muted)"
-                width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M2 4l4 4 4-4" />
-              </svg>
-            </div>
-            <div style="position:relative;min-width:80px">
-              <select id="speed-select" class="input-field"
-                style="width:100%;padding:11px 10px;padding-right:24px;font-size:12px;font-weight:600;font-family:'JetBrains Mono',monospace;text-align:center"
-                onchange="localStorage.setItem('tada-speed',this.value)">
-              </select>
-              <svg
-                style="position:absolute;right:6px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-muted)"
-                width="8" height="8" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M1 2.5l3 3 3-3" />
-              </svg>
-            </div>
-          </div>
-        </section>
-
         <!-- Voice Profiles (Reference Audio for Voice Cloning) -->
         <section class="card p-5 mb-4 reveal" style="animation-delay:0.07s">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
@@ -2388,6 +2355,33 @@
           </div>
           <div id="advanced-controls-panel" style="display:none">
             <p class="text-xs mb-4" style="color:var(--text-secondary)">Fine-tune generation quality and style. Defaults work well for most cases.</p>
+
+            <!-- Model -->
+            <div class="mb-3">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <label style="font-size:11px;color:var(--text-secondary)">Model</label>
+                <span id="model-size" class="font-mono" style="font-size:10px;color:var(--accent)">~4GB</span>
+              </div>
+              <div style="position:relative">
+                <select id="model-select" class="input-field" style="width:100%;padding:8px 12px;font-size:12px">
+                  <option value="tada-1b">TADA 1B — English</option>
+                  <option value="tada-3b">TADA 3B — Multilingual</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Speed -->
+            <div class="mb-3" title="Playback speed multiplier. Affects generation pacing.">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <label style="font-size:11px;color:var(--text-secondary)">Speed</label>
+              </div>
+              <div style="position:relative">
+                <select id="speed-select" class="input-field"
+                  style="width:100%;padding:8px 12px;font-size:12px;font-family:'JetBrains Mono',monospace"
+                  onchange="localStorage.setItem('tada-speed',this.value)">
+                </select>
+              </div>
+            </div>
 
             <!-- Acoustic CFG Scale -->
             <div class="mb-3" title="Controls how closely the output follows the voice prompt. Higher = more faithful to reference voice but less natural.">
