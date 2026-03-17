@@ -89,7 +89,62 @@ TadaTTS-Studio/
 - HuggingFace: `HumeAI/tada-3b-ml`
 - Languages: English, Arabic, Chinese, German, Spanish, French, Italian, Japanese, Polish, Portuguese
 
-Models auto-download from HuggingFace on first use.
+**TADA Codec Encoder** (shared, required for voice cloning)
+- HuggingFace: `HumeAI/tada-codec`
+
+Models auto-download from HuggingFace on first use and are cached locally.
+
+### HuggingFace Setup (Required)
+
+TADA requires a HuggingFace account and Llama 3.2 license acceptance:
+
+1. Create a free account at https://huggingface.co
+2. Accept the Llama 3.2 license at https://huggingface.co/meta-llama/Llama-3.2-1B
+3. Create an access token at https://huggingface.co/settings/tokens (Read access)
+4. Login via terminal:
+   ```bash
+   venv\Scripts\python -c "from huggingface_hub import login; login(token='hf_YOUR_TOKEN')"
+   ```
+
+### Model Cache Location
+
+Models are stored in the HuggingFace cache directory:
+
+| OS | Default Path |
+|----|-------------|
+| **Windows** | `C:\Users\<USER>\.cache\huggingface\hub\` |
+| **Linux** | `~/.cache/huggingface/hub/` |
+| **macOS** | `~/.cache/huggingface/hub/` |
+
+Inside the cache, each model has its own folder:
+```
+huggingface/hub/
++-- models--HumeAI--tada-1b/          # TADA 1B (~4GB)
++-- models--HumeAI--tada-3b-ml/       # TADA 3B (~9GB)
++-- models--HumeAI--tada-codec/       # Encoder (~1GB)
+```
+
+To change the cache location, set the `HF_HOME` environment variable before starting the server:
+```bash
+set HF_HOME=D:\models\huggingface
+```
+
+### Manual Download (Faster)
+
+If auto-download is slow, use [aria2](https://github.com/aria2/aria2) for 16x parallel downloads:
+
+```bash
+# Download TADA-1B
+aria2c -x 16 -s 16 -d "C:\Users\<USER>\.cache\huggingface\hub\models--HumeAI--tada-1b\snapshots\<hash>\" https://huggingface.co/HumeAI/tada-1b/resolve/main/model.safetensors
+
+# Download TADA-3B (two parts)
+aria2c -x 16 -s 16 https://huggingface.co/HumeAI/tada-3b-ml/resolve/main/model-00001-of-00002.safetensors
+aria2c -x 16 -s 16 https://huggingface.co/HumeAI/tada-3b-ml/resolve/main/model-00002-of-00002.safetensors
+```
+
+Or download directly from the browser:
+- TADA-1B: https://huggingface.co/HumeAI/tada-1b/tree/main
+- TADA-3B: https://huggingface.co/HumeAI/tada-3b-ml/tree/main
 
 ## Dependencies
 
