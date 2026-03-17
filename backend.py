@@ -1,5 +1,9 @@
 """TADA TTS Studio — Flask API Server"""
 
+import warnings
+warnings.filterwarnings("ignore", message=".*Config not found for parakeet.*")
+warnings.filterwarnings("ignore", message=".*Some weights of the model checkpoint.*")
+
 import argparse
 import asyncio
 import base64
@@ -14,6 +18,7 @@ import sys
 import time
 import threading
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from queue import Queue
 
@@ -618,6 +623,104 @@ def _model_files_present(model_id=None) -> bool:
         return False
 
 
+def _encoder_files_present() -> bool:
+    """Check if the shared TADA encoder is cached locally."""
+    try:
+        from huggingface_hub import try_to_load_from_cache
+        result = try_to_load_from_cache(ENCODER_HF_ID, "encoder/config.json")
+        return result is not None and not isinstance(result, type(None))
+    except Exception:
+        return False
+
+
+@contextmanager
+def _hf_offline_mode(enabled: bool):
+    """Temporarily force Hugging Face + Transformers into offline mode."""
+    if not enabled:
+        yield
+        return
+
+    keys = ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")
+    previous = {key: os.environ.get(key) for key in keys}
+    restore_callbacks = []
+    try:
+        for key in keys:
+            os.environ[key] = "1"
+
+        try:
+            import huggingface_hub.constants as hf_constants
+            previous_offline = getattr(hf_constants, "HF_HUB_OFFLINE", None)
+            hf_constants.HF_HUB_OFFLINE = True
+            restore_callbacks.append(lambda: setattr(hf_constants, "HF_HUB_OFFLINE", previous_offline))
+        except Exception:
+            pass
+
+        try:
+            import transformers.tokenization_utils_base as tok_base
+            if hasattr(tok_base, "is_offline_mode"):
+                original_is_offline_mode = tok_base.is_offline_mode
+                tok_base.is_offline_mode = lambda: True
+                restore_callbacks.append(lambda: setattr(tok_base, "is_offline_mode", original_is_offline_mode))
+        except Exception:
+            pass
+
+        try:
+            from transformers import AutoTokenizer
+            original_auto_from_pretrained = AutoTokenizer.from_pretrained
+
+            def _offline_auto_from_pretrained(*args, **kwargs):
+                kwargs.setdefault("local_files_only", True)
+                return original_auto_from_pretrained(*args, **kwargs)
+
+            AutoTokenizer.from_pretrained = _offline_auto_from_pretrained
+            restore_callbacks.append(lambda: setattr(AutoTokenizer, "from_pretrained", original_auto_from_pretrained))
+        except Exception:
+            pass
+
+        try:
+            from tada.modules.decoder import Decoder
+            original_decoder_from_pretrained = Decoder.__dict__.get("from_pretrained")
+            if isinstance(original_decoder_from_pretrained, classmethod):
+                original_decoder_func = original_decoder_from_pretrained.__func__
+
+                def _offline_decoder_from_pretrained(cls, *args, **kwargs):
+                    kwargs.setdefault("local_files_only", True)
+                    return original_decoder_func(cls, *args, **kwargs)
+
+                Decoder.from_pretrained = classmethod(_offline_decoder_from_pretrained)
+                restore_callbacks.append(lambda: setattr(Decoder, "from_pretrained", original_decoder_from_pretrained))
+        except Exception:
+            pass
+
+        try:
+            from tada.modules.encoder import Encoder
+            original_encoder_from_pretrained = Encoder.__dict__.get("from_pretrained")
+            if isinstance(original_encoder_from_pretrained, classmethod):
+                original_encoder_func = original_encoder_from_pretrained.__func__
+
+                def _offline_encoder_from_pretrained(cls, *args, **kwargs):
+                    kwargs.setdefault("local_files_only", True)
+                    return original_encoder_func(cls, *args, **kwargs)
+
+                Encoder.from_pretrained = classmethod(_offline_encoder_from_pretrained)
+                restore_callbacks.append(lambda: setattr(Encoder, "from_pretrained", original_encoder_from_pretrained))
+        except Exception:
+            pass
+
+        yield
+    finally:
+        for restore in reversed(restore_callbacks):
+            try:
+                restore()
+            except Exception:
+                pass
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
 def _get_device():
     """Return the current device string."""
     return _current_device
@@ -672,12 +775,25 @@ def load_encoder():
     from tada.modules.encoder import Encoder
 
     device = _get_device()
+    offline = _encoder_files_present()
     with tada_lock:
         if tada_encoder is None:
-            logger.info("Loading TADA encoder on {} ...", device)
-            tada_encoder = Encoder.from_pretrained(
-                ENCODER_HF_ID, subfolder="encoder"
-            ).to(device)
+            logger.info("Loading TADA encoder on {}{} ...", device, " [offline cache]" if offline else "")
+            try:
+                with _hf_offline_mode(offline):
+                    encoder_kwargs = {}
+                    if offline:
+                        encoder_kwargs["local_files_only"] = True
+                    tada_encoder = Encoder.from_pretrained(
+                        ENCODER_HF_ID, subfolder="encoder", **encoder_kwargs
+                    ).to(device)
+            except Exception as e:
+                msg = str(e)
+                if "WinError 10013" in msg or "huggingface.co" in msg:
+                    raise RuntimeError(
+                        "TADA encoder could not be loaded because Hugging Face access is blocked and the encoder is not fully cached yet."
+                    ) from e
+                raise
             logger.success("TADA encoder ready on {}", device)
     return tada_encoder
 
@@ -704,13 +820,26 @@ def load_model(model_id=None):
     device = _get_device()
     # Use float16 on CPU (float32 OOMs on 3B model), bfloat16 on CUDA
     dtype = torch.bfloat16 if device == "cuda" else torch.float16
+    offline = _model_files_present(model_id)
 
     with tada_lock:
         if tada_model is None:
-            logger.info("Loading {} on {} ({}) ...", cfg["name"], device, dtype)
-            tada_model = TadaForCausalLM.from_pretrained(
-                cfg["hf_model_id"], dtype=dtype
-            ).to(device)
+            logger.info("Loading {} on {} ({}){} ...", cfg["name"], device, dtype, " [offline cache]" if offline else "")
+            try:
+                with _hf_offline_mode(offline):
+                    model_kwargs = {"dtype": dtype}
+                    if offline:
+                        model_kwargs["local_files_only"] = True
+                    tada_model = TadaForCausalLM.from_pretrained(
+                        cfg["hf_model_id"], **model_kwargs
+                    ).to(device)
+            except Exception as e:
+                msg = str(e)
+                if "WinError 10013" in msg or "huggingface.co" in msg:
+                    raise RuntimeError(
+                        f"{cfg['name']} could not be loaded because Hugging Face access is blocked and the model/tokenizer is not fully cached yet."
+                    ) from e
+                raise
             _current_model_id = model_id
             logger.success("{} ready on {}", cfg["name"], device)
     return tada_model
@@ -1011,37 +1140,154 @@ def serve_voice_audio(voice_id):
 
 
 # --- Sample voices (presets) ---
-@app.route("/api/samplevoices")
-def list_sample_voices():
-    """List all sample voice files organized by language subfolder."""
+SAMPLE_VOICE_EXTENSIONS = (".wav", ".mp3", ".flac", ".ogg")
+_GENERIC_SAMPLE_STEMS = {
+    "audio", "preview", "reference", "reference-audio", "reference_audio",
+    "sample", "sample-audio", "sample_audio", "voice", "voice-preview",
+    "voice_preview",
+}
+_SAMPLE_CATEGORY_FOLDERS = {"female", "male"}
+
+
+def _clean_sample_voice_name(name):
+    """Turn filenames or folder names into a cleaner display label."""
+    cleaned = (name or "").strip()
+    for prefix in ("voice_preview_", "voice-preview-", "voice preview ", "ElevenLabs_"):
+        if cleaned.startswith(prefix):
+            cleaned = cleaned[len(prefix):]
+    cleaned = os.path.splitext(cleaned)[0]
+    cleaned = re.sub(r"\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}_?", "", cleaned)
+    cleaned = re.sub(r"_?(pre|pvc)_sp\d+.*$", "", cleaned)
+    cleaned = re.sub(r"[_-]\d{8}_\d{6}$", "", cleaned)
+    cleaned = re.sub(r"\s*\(\d+\)\s*$", "", cleaned)
+    cleaned = re.sub(r"[_-]+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip(" _-")
+
+
+def _read_sample_profile_meta(sample_dir):
+    meta_path = os.path.join(sample_dir, "profile.json")
+    if not os.path.isfile(meta_path):
+        return {}
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _normalize_sample_voice_path(sample_path):
+    raw_path = str(sample_path or "").strip()
+    if not raw_path or os.path.isabs(raw_path):
+        return None
+    normalized = os.path.normpath(raw_path).replace("\\", "/").lstrip("/")
+    if normalized in ("", ".") or normalized.startswith("../") or normalized == "..":
+        return None
+    return normalized
+
+
+def _resolve_sample_voice_path(sample_path):
+    """Resolve a sample path under SAMPLE_VOICES_DIR and block traversal."""
+    rel_path = _normalize_sample_voice_path(sample_path)
+    if not rel_path:
+        return None, None
+    root = os.path.abspath(SAMPLE_VOICES_DIR)
+    abs_path = os.path.abspath(os.path.join(root, rel_path))
+    try:
+        if os.path.commonpath([root, abs_path]) != root:
+            return None, None
+    except ValueError:
+        return None, None
+    return abs_path, rel_path
+
+
+def _sample_category_from_rel_path(rel_path):
+    parts = [part for part in str(rel_path or "").replace("\\", "/").split("/") if part]
+    if len(parts) < 3:
+        return ""
+    category = parts[1].strip().lower()
+    return category if category in _SAMPLE_CATEGORY_FOLDERS else ""
+
+
+def _collect_sample_voices():
+    """List sample voices from flat files or nested voice-profile folders."""
     samples = []
+    seen_paths = set()
     if not os.path.exists(SAMPLE_VOICES_DIR):
-        return jsonify(samples)
+        return samples
+
     for lang_dir in sorted(os.listdir(SAMPLE_VOICES_DIR)):
         lang_path = os.path.join(SAMPLE_VOICES_DIR, lang_dir)
         if not os.path.isdir(lang_path):
             continue
-        for fname in sorted(os.listdir(lang_path)):
-            if not fname.lower().endswith((".wav", ".mp3", ".flac", ".ogg")):
-                continue
-            # Derive a display name from filename
-            name = fname
-            for prefix in ("voice_preview_", "ElevenLabs_"):
-                if name.startswith(prefix):
-                    name = name[len(prefix):]
-            name = os.path.splitext(name)[0]
-            # Clean up timestamps and metadata suffixes
-            name = re.sub(r'\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}_?', '', name)
-            name = re.sub(r'_?(pre|pvc)_sp\d+.*$', '', name)
-            name = re.sub(r'\s*\(\d+\)\s*$', '', name)
-            name = name.strip(' _-')
-            samples.append({
-                "lang": lang_dir,
-                "file": fname,
-                "name": name or fname,
-                "path": f"{lang_dir}/{fname}",
-            })
-    return jsonify(samples)
+
+        for root, dirnames, filenames in os.walk(lang_path):
+            dirnames.sort()
+            filenames.sort()
+            profile_meta = _read_sample_profile_meta(root)
+            audio_candidates = []
+
+            profile_audio = profile_meta.get("audio_file")
+            if profile_audio:
+                candidate = os.path.join(root, profile_audio)
+                if os.path.isfile(candidate):
+                    audio_candidates.append(candidate)
+
+            if not audio_candidates:
+                audio_candidates.extend(
+                    os.path.join(root, fname)
+                    for fname in filenames
+                    if fname.lower().endswith(SAMPLE_VOICE_EXTENSIONS)
+                )
+
+            for audio_path in audio_candidates:
+                rel_path = os.path.relpath(audio_path, SAMPLE_VOICES_DIR).replace("\\", "/")
+                if rel_path in seen_paths:
+                    continue
+                seen_paths.add(rel_path)
+
+                stem = os.path.splitext(os.path.basename(audio_path))[0].lower()
+                if profile_meta.get("name"):
+                    name = str(profile_meta["name"]).strip()
+                elif stem in _GENERIC_SAMPLE_STEMS and os.path.abspath(root) != os.path.abspath(lang_path):
+                    name = _clean_sample_voice_name(os.path.basename(root))
+                else:
+                    name = _clean_sample_voice_name(os.path.basename(audio_path))
+
+                samples.append({
+                    "lang": rel_path.split("/", 1)[0],
+                    "category": _sample_category_from_rel_path(rel_path),
+                    "file": os.path.basename(audio_path),
+                    "name": name or os.path.basename(audio_path),
+                    "path": rel_path,
+                    "transcript": str(profile_meta.get("transcript", "") or "").strip(),
+                })
+
+    samples.sort(key=lambda item: (item["lang"], item.get("category", ""), item["name"].lower(), item["path"].lower()))
+    return samples
+
+
+def _find_existing_sample_profile(sample_path):
+    """Return an existing sample-based voice profile for the given sample path."""
+    normalized = _normalize_sample_voice_path(sample_path)
+    if not normalized:
+        return None
+    basename = os.path.basename(normalized).lower()
+    for profile in _list_voice_profiles():
+        if profile.get("source") != "sample":
+            continue
+        existing_path = _normalize_sample_voice_path(profile.get("sample_path", ""))
+        if existing_path and existing_path.lower() == normalized.lower():
+            return profile
+        if not existing_path and str(profile.get("original_filename", "")).lower() == basename:
+            return profile
+    return None
+
+
+@app.route("/api/samplevoices")
+def list_sample_voices():
+    """List sample voices from sample voices/<lang>/..."""
+    return jsonify(_collect_sample_voices())
 
 
 @app.route("/api/sample-voices/file/<path:filepath>")
@@ -1061,14 +1307,30 @@ def create_voice_from_sample():
     if not sample_path:
         return jsonify({"error": "No sample path provided"}), 400
 
-    src = os.path.join(SAMPLE_VOICES_DIR, sample_path)
+    src, normalized_sample_path = _resolve_sample_voice_path(sample_path)
+    if not src:
+        return jsonify({"error": "Invalid sample path"}), 400
     if not os.path.isfile(src):
         return jsonify({"error": "Sample file not found"}), 404
 
+    sample_meta = _read_sample_profile_meta(os.path.dirname(src))
     if not name:
-        name = os.path.splitext(os.path.basename(sample_path))[0][:40]
+        name = str(sample_meta.get("name", "") or "").strip()
+    if not name:
+        name = (_clean_sample_voice_name(os.path.basename(src)) or os.path.splitext(os.path.basename(src))[0])[:40]
+    if not transcript:
+        transcript = str(sample_meta.get("transcript", "") or "").strip()
 
-    ext = os.path.splitext(sample_path)[1].lower()
+    existing_profile = _find_existing_sample_profile(normalized_sample_path)
+    if existing_profile:
+        return jsonify({
+            "error": "This sample voice already has a profile",
+            "profile": existing_profile,
+        }), 409
+
+    ext = os.path.splitext(src)[1].lower()
+    if ext not in SAMPLE_VOICE_EXTENSIONS:
+        return jsonify({"error": f"Unsupported sample format: {ext}"}), 400
     safe_name = re.sub(r'[^a-zA-Z0-9]+', '-', name[:40].lower()).strip('-')
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     voice_id = f"{safe_name}_{timestamp}"
@@ -1096,7 +1358,8 @@ def create_voice_from_sample():
         "name": name,
         "audio_file": audio_filename,
         "transcript": transcript,
-        "original_filename": os.path.basename(sample_path),
+        "original_filename": os.path.basename(normalized_sample_path),
+        "sample_path": normalized_sample_path,
         "created": datetime.now().isoformat(timespec="seconds"),
         "source": "sample",
     }
