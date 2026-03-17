@@ -3585,9 +3585,15 @@
       if (STATE.isGenerating) return;
 
       setGenerating(true);
-      $('#gen-label').textContent = 'Streaming...';
+      $('#gen-label').textContent = 'Loading model...';
       $('#gen-spinner').style.display = 'inline-block';
       $('#gen-spinner').classList.remove('hidden');
+      const streamStartTime = Date.now();
+      const streamTimer = setInterval(() => {
+        const elapsed = ((Date.now() - streamStartTime) / 1000).toFixed(0);
+        const label = $('#gen-label');
+        if (label) label.textContent = `Streaming... ${elapsed}s`;
+      }, 1000);
 
       const speed = parseFloat($('#speed-select').value) || 1.0;
       if (!STATE.selectedVoice) { toast('Select a voice profile first', 'error'); setGenerating(false); return; }
@@ -3681,6 +3687,7 @@
           try { STATE.streamAudioCtx.close(); } catch {}
           STATE.streamAudioCtx = null;
         }
+        clearInterval(streamTimer);
         STATE.streamAbortController = null;
         setGenerating(false);
         $('#gen-label').textContent = STATE.genMode === 'listen' ? 'Listen' : 'Generate Audio';
@@ -3762,16 +3769,31 @@
           skip_enhance: !STATE.stepEnhance,
           skip_clean: !STATE.stepClean,
         };
-        const genResult = await api('/api/generate', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(genPayload),
-          signal: abort.signal,
-        });
+        // Show live elapsed timer during generation
+        $('#gen-label').textContent = 'Loading model...';
+        const genStartTime = Date.now();
+        const genTimer = setInterval(() => {
+          const elapsed = ((Date.now() - genStartTime) / 1000).toFixed(0);
+          const label = $('#gen-label');
+          if (label && !label.textContent.includes('Chunk')) {
+            const phase = elapsed < 5 ? 'Loading model...' : 'Generating...';
+            label.textContent = `${phase} ${elapsed}s`;
+          }
+        }, 1000);
+        let genResult;
+        try {
+          genResult = await api('/api/generate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(genPayload),
+            signal: abort.signal,
+          });
+        } finally { clearInterval(genTimer); }
         let result;
         STATE.currentJobId = genResult.job_id || null;
         if (genResult.job_id) { result = await streamChunkedGeneration(genResult.job_id, genResult.total_chunks); }
         else { result = genResult; }
-        toast(`Generated in ${result.inference_time}s (RTF ${result.rtf})`);
+        const totalElapsed = ((Date.now() - genStartTime) / 1000).toFixed(1);
+        toast(`Generated ${result.duration_seconds || '?'}s audio in ${totalElapsed}s (RTF ${result.rtf})`);
         playAudio(result, true); await loadHistory();
         // Keep isGenerating true — post-processing polls use the abort signal
         $('#abort-btn').style.display = 'none';
@@ -3853,7 +3875,7 @@
           const d = JSON.parse(ev.data);
           if (d.phase === 'checking') updateDownloadStatus('Checking cache...', 'Please wait');
           else if (d.phase === 'downloading') { removeDownloadStatus(); const det = d.progress >= 100 ? `Done ${d.size} @ ${d.speed}` : `${d.downloaded_mb}MB / ${d.total_mb}MB @ ${d.speed}`; updateDownloadFile(d.file, d.progress, det); }
-          else if (d.phase === 'loading') { removeDownloadStatus(); updateDownloadStatus('Loading model...', 'Initializing ONNX runtime'); }
+          else if (d.phase === 'loading') { removeDownloadStatus(); updateDownloadStatus('Loading model into memory...', 'This may take 20-60s on CPU'); }
           else if (d.phase === 'ready') { es.close(); STATE.downloadEventSource = null; hideDownloadModal(); toast('Model ready!'); resolve(); }
           else if (d.phase === 'error') { es.close(); STATE.downloadEventSource = null; hideDownloadModal(); reject(new Error(d.message || 'Download failed')); }
         };
