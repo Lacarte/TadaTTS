@@ -1224,6 +1224,9 @@ def generate():
     skip_enhance = data.get("skip_enhance", False)
     skip_clean = data.get("skip_clean", False)
 
+    # TADA inference parameters
+    inference_params = data.get("inference", {})
+
     if not prompt.strip():
         return jsonify({"error": "Prompt is required"}), 400
     if model_id not in MODELS:
@@ -1275,8 +1278,29 @@ def generate():
     single_block = tts_prompt
     start = time.perf_counter()
     try:
+        # Build InferenceOptions from request params
+        from tada.modules.tada import InferenceOptions
+        inf_opts = InferenceOptions(
+            acoustic_cfg_scale=float(inference_params.get("acoustic_cfg_scale", 1.6)),
+            duration_cfg_scale=float(inference_params.get("duration_cfg_scale", 1.0)),
+            noise_temperature=float(inference_params.get("noise_temperature", 0.9)),
+            num_flow_matching_steps=int(inference_params.get("num_flow_matching_steps", 10)),
+            num_acoustic_candidates=int(inference_params.get("num_acoustic_candidates", 1)),
+            scorer=inference_params.get("scorer", "likelihood"),
+            spkr_verification_weight=float(inference_params.get("spkr_verification_weight", 1.0)),
+            speed_up_factor=float(inference_params["speed_up_factor"]) if inference_params.get("speed_up_factor") else None,
+            negative_condition_source=inference_params.get("negative_condition_source", "negative_step_output"),
+            text_only_logit_scale=float(inference_params.get("text_only_logit_scale", 0.0)),
+        )
+        gen_kwargs = {
+            "prompt": voice_prompt,
+            "text": single_block,
+            "num_extra_steps": int(inference_params.get("num_extra_steps", 0)),
+            "normalize_text": inference_params.get("normalize_text", True),
+            "inference_options": inf_opts,
+        }
         with generation_inference_lock:
-            output = tada.generate(prompt=voice_prompt, text=single_block)
+            output = tada.generate(**gen_kwargs)
             audio = output.audio[0].cpu().numpy()
     except Exception as e:
         logger.exception("TTS inference failed")
@@ -1420,6 +1444,7 @@ def stream_audio():
     prompt = data.get("prompt", "")
     speed = float(data.get("speed", 1.0))
     speed = max(0.5, min(2.0, speed))
+    inference_params = data.get("inference", {})
 
     if not prompt.strip():
         return jsonify({"error": "Prompt is required"}), 400
@@ -1446,6 +1471,20 @@ def stream_audio():
 
     logger.info("Stream  \033[1m{}\033[0m | {} | {} chars", model_id, voice_id, len(prompt))
 
+    # Build InferenceOptions
+    from tada.modules.tada import InferenceOptions
+    inf_opts = InferenceOptions(
+        acoustic_cfg_scale=float(inference_params.get("acoustic_cfg_scale", 1.6)),
+        duration_cfg_scale=float(inference_params.get("duration_cfg_scale", 1.0)),
+        noise_temperature=float(inference_params.get("noise_temperature", 0.9)),
+        num_flow_matching_steps=int(inference_params.get("num_flow_matching_steps", 10)),
+        num_acoustic_candidates=int(inference_params.get("num_acoustic_candidates", 1)),
+        scorer=inference_params.get("scorer", "likelihood"),
+        speed_up_factor=float(inference_params["speed_up_factor"]) if inference_params.get("speed_up_factor") else None,
+        negative_condition_source=inference_params.get("negative_condition_source", "negative_step_output"),
+        text_only_logit_scale=float(inference_params.get("text_only_logit_scale", 0.0)),
+    )
+
     q = Queue()
 
     def _run_stream():
@@ -1453,7 +1492,12 @@ def stream_audio():
         _stream_active.set()
         try:
             with generation_inference_lock:
-                output = tada.generate(prompt=voice_prompt, text=tts_prompt)
+                output = tada.generate(
+                    prompt=voice_prompt, text=tts_prompt,
+                    num_extra_steps=int(inference_params.get("num_extra_steps", 0)),
+                    normalize_text=inference_params.get("normalize_text", True),
+                    inference_options=inf_opts,
+                )
                 audio = output.audio[0].cpu().numpy().astype(np.float32)
             q.put(("audio", audio, 24000))
             q.put(("done", None, None))
