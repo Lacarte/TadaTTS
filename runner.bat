@@ -33,5 +33,22 @@ echo.
 :: Open browser after a short delay (in background)
 start "" cmd /c "timeout /t 5 /nobreak >nul && start http://localhost:%PORT%"
 
-:: Run server in THIS console — closing the window kills it
+:: Run server — restart automatically on crash
+:run_server
 venv\Scripts\python.exe backend.py --port %PORT%
+set EXIT_CODE=%ERRORLEVEL%
+if %EXIT_CODE% neq 0 (
+    echo.
+    echo ========================================
+    echo   Server crashed (exit code %EXIT_CODE%)
+    echo   Restarting in 3 seconds...
+    echo   Press Ctrl+C to stop.
+    echo ========================================
+    echo.
+    timeout /t 3 /nobreak >nul
+    goto run_server
+)
+
+echo.
+echo Server stopped.
+pause

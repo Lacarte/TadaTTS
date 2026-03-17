@@ -1,8 +1,19 @@
 """TADA TTS Studio — Flask API Server"""
 
+import os
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+
 import warnings
-warnings.filterwarnings("ignore", message=".*Config not found for parakeet.*")
-warnings.filterwarnings("ignore", message=".*Some weights of the model checkpoint.*")
+warnings.filterwarnings("ignore", message=".*Config not found.*")
+warnings.filterwarnings("ignore", message=".*Some weights.*")
+warnings.filterwarnings("ignore", message=".*torch_dtype.*deprecated.*")
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+import logging
+logging.getLogger("dac").setLevel(logging.ERROR)
+logging.getLogger("audiotools").setLevel(logging.ERROR)
+logging.getLogger("transformers").setLevel(logging.ERROR)
 
 import argparse
 import asyncio
@@ -976,6 +987,13 @@ def _download_file_with_progress(url: str, dest_path: str, queue: Queue, label: 
 
 app = Flask(__name__, static_folder=None)
 CORS(app)
+
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Catch all unhandled exceptions and return JSON error instead of crashing."""
+    logger.exception("Unhandled error in request")
+    return jsonify({"error": str(e)}), 500
 
 
 # --- Serve frontend ---
