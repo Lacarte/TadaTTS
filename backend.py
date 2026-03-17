@@ -837,13 +837,20 @@ def load_model(model_id=None):
         if tada_model is None:
             logger.info("Loading {} on {} ({}){} ...", cfg["name"], device, dtype, " [offline cache]" if offline else "")
             try:
+                import gc
+                gc.collect()
                 with _hf_offline_mode(offline):
-                    model_kwargs = {"dtype": dtype}
+                    model_kwargs = {
+                        "dtype": dtype,
+                        "low_cpu_mem_usage": True,
+                    }
                     if offline:
                         model_kwargs["local_files_only"] = True
                     tada_model = TadaForCausalLM.from_pretrained(
                         cfg["hf_model_id"], **model_kwargs
-                    ).to(device)
+                    )
+                    if str(next(tada_model.parameters()).device) != device:
+                        tada_model = tada_model.to(device)
             except Exception as e:
                 msg = str(e)
                 if "WinError 10013" in msg or "huggingface.co" in msg:
