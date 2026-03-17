@@ -809,17 +809,38 @@ def load_encoder():
     return tada_encoder
 
 
+def _unload_encoder():
+    """Free encoder from memory to make room for the model."""
+    global tada_encoder
+    if tada_encoder is not None:
+        import gc
+        del tada_encoder
+        tada_encoder = None
+        gc.collect()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+        logger.info("Encoder unloaded to free memory")
+
+
 def load_model(model_id=None):
     """Load (or return cached) TADA model."""
     global tada_model, _current_model_id
     if model_id is None:
         model_id = _current_model_id or "tada-1b"
 
-    # If switching models, unload previous
+    # If switching models, unload previous to free memory
     if _current_model_id and _current_model_id != model_id:
+        import gc
         with tada_lock:
+            del tada_model
             tada_model = None
             _current_model_id = None
+        gc.collect()
+        logger.info("Unloaded previous model to free memory")
 
     if tada_model is not None:
         return tada_model
@@ -1641,6 +1662,8 @@ def generate():
             if job.get("status") == "running":
                 return jsonify({"error": "A generation is already in progress. Please wait or abort."}), 429
 
+    # Unload encoder to free memory before loading model (critical for 3B)
+    _unload_encoder()
     tada = load_model(model_id)
     logger.info("Generate  \033[1m{}\033[0m | {} | {} chars", model_id, voice_name, len(prompt))
 
@@ -1853,6 +1876,7 @@ def stream_audio():
     if _stream_active.is_set():
         return jsonify({"error": "A stream is already in progress."}), 429
 
+    _unload_encoder()
     tada = load_model(model_id)
     tts_prompt = clean_for_tts(prompt)
 
