@@ -1935,6 +1935,13 @@
               <svg id="sample-voices-chevron" width="10" height="10" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" style="transition:transform 0.2s;transform:rotate(180deg)"><path d="M6 9l6 6 6-6"/></svg>
             </div>
             <div id="sample-voices-list" style="display:flex;flex-wrap:wrap;gap:4px"></div>
+            <div style="margin-top:8px;display:flex;gap:6px">
+              <button onclick="loadAllSampleVoices()" id="load-all-samples-btn"
+                style="padding:5px 12px;border-radius:6px;background:rgba(78,205,196,0.1);border:1px solid rgba(78,205,196,0.2);color:var(--accent);font-size:10px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.2s">
+                Load All
+              </button>
+              <p id="load-samples-status" style="display:none;font-size:10px;color:var(--accent);align-self:center;margin:0"></p>
+            </div>
           </div>
 
           <!-- Voice Profiles List -->
@@ -2474,24 +2481,7 @@
           </div>
         </section>
 
-        <!-- Sample Voice Presets -->
-        <section class="card p-5 mb-4">
-          <label class="block text-[10px] font-bold uppercase tracking-[0.15em] mb-2.5"
-            style="color:var(--text-muted)">Sample Voice Presets</label>
-          <p class="text-xs mb-3" style="color:var(--text-secondary)">Create voice profiles from bundled sample audio files. Each sample becomes a selectable voice on the TTS page.</p>
-          <div id="settings-sample-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px"></div>
-          <div style="display:flex;gap:8px">
-            <button onclick="loadAllSampleVoices()" id="load-all-samples-btn"
-              style="flex:1;padding:8px;border-radius:6px;background:var(--accent);color:#0a0e13;font-size:12px;font-weight:600;font-family:inherit;border:none;cursor:pointer;transition:all 0.2s">
-              Load All Sample Voices
-            </button>
-            <button onclick="loadSettingsSampleList()"
-              style="padding:8px 12px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--text-muted);font-size:12px;font-family:inherit;cursor:pointer">
-              Refresh
-            </button>
-          </div>
-          <p id="load-samples-status" style="display:none;margin-top:8px;font-size:11px;color:var(--accent);text-align:center"></p>
-        </section>
+        <!-- Sample Voice Presets removed — now in Voice Profile on TTS page -->
 
         <!-- Pre-Processing -->
         <section class="card p-5 mb-4">
