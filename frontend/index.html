@@ -3085,10 +3085,16 @@
 
     async function loadSampleVoices() {
       try {
-        _sampleVoices = await api('/api/samplevoices');
+        const resp = await fetch('/api/samplevoices');
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        _sampleVoices = await resp.json();
         console.log('Sample voices loaded:', _sampleVoices.length);
         renderSampleVoices();
-      } catch (e) { console.error('Failed to load sample voices:', e); _sampleVoices = []; }
+      } catch (e) {
+        console.error('Failed to load sample voices:', e);
+        _sampleVoices = [];
+        renderSampleVoices();
+      }
     }
 
     function renderSampleVoices() {
