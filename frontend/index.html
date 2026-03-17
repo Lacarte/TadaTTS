@@ -2474,6 +2474,43 @@
           </div>
         </section>
 
+        <!-- Sample Voice Presets -->
+        <section class="card p-5 mb-4">
+          <label class="block text-[10px] font-bold uppercase tracking-[0.15em] mb-2.5"
+            style="color:var(--text-muted)">Sample Voice Presets</label>
+          <p class="text-xs mb-3" style="color:var(--text-secondary)">Create voice profiles from bundled sample audio files. Each sample becomes a selectable voice on the TTS page.</p>
+          <div id="settings-sample-list" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px"></div>
+          <div style="display:flex;gap:8px">
+            <button onclick="loadAllSampleVoices()" id="load-all-samples-btn"
+              style="flex:1;padding:8px;border-radius:6px;background:var(--accent);color:#0a0e13;font-size:12px;font-weight:600;font-family:inherit;border:none;cursor:pointer;transition:all 0.2s">
+              Load All Sample Voices
+            </button>
+            <button onclick="loadSettingsSampleList()"
+              style="padding:8px 12px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--text-muted);font-size:12px;font-family:inherit;cursor:pointer">
+              Refresh
+            </button>
+          </div>
+          <p id="load-samples-status" style="display:none;margin-top:8px;font-size:11px;color:var(--accent);text-align:center"></p>
+        </section>
+
+        <!-- Pre-Processing -->
+        <section class="card p-5 mb-4">
+          <label class="block text-[10px] font-bold uppercase tracking-[0.15em] mb-2.5"
+            style="color:var(--text-muted)">Pre-Processing</label>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:var(--bg-darkest);cursor:pointer">
+              <input type="checkbox" id="step-format-toggle" onchange="toggleStep('format', this.checked)"
+                style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+              <div style="flex:1">
+                <span style="font-size:13px;color:var(--text);font-weight:500">Format Script</span>
+                <span class="font-mono" style="font-size:10px;color:var(--text-muted);margin-left:6px">Auto-normalize text before generation</span>
+              </div>
+              <span title="When enabled, text is automatically cleaned and normalized before generation: expands contractions, abbreviations, numbers, currencies, units, and dates into spoken form. Splits long text into breathing-sized blocks for better pacing."
+                style="cursor:help;width:16px;height:16px;border-radius:50%;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--text-muted);flex-shrink:0">i</span>
+            </label>
+          </div>
+        </section>
+
         <!-- Post-Processing Steps -->
         <section class="card p-5 mb-4">
           <label class="block text-[10px] font-bold uppercase tracking-[0.15em] mb-2.5"
@@ -2729,6 +2766,8 @@
         b.style.color = isActive ? 'var(--accent)' : 'var(--text-muted)';
         b.classList.toggle('active', isActive);
       });
+      // Load settings sample list when opening settings
+      if (page === 'settings') loadSettingsSampleList();
     }
     function toggleSidebar() {
       document.getElementById('sidebar').classList.toggle('collapsed');
@@ -3097,6 +3136,80 @@
         renderVoiceProfiles();
         toast(`Voice "${name}" added`);
       } catch (e) { toast(e.message || 'Failed to add sample voice', 'error'); }
+    }
+
+    // --- Settings: Sample Voice Management ---
+    function loadSettingsSampleList() {
+      const list = $('#settings-sample-list');
+      if (!list) return;
+      if (!_sampleVoices.length) {
+        list.innerHTML = '<p style="color:var(--text-muted);font-size:11px">No sample voices found in sample voices/ folder.</p>';
+        return;
+      }
+      // Check which are already loaded as profiles
+      const existingNames = new Set(STATE.voiceProfiles.map(p => (p.source === 'sample' ? p.original_filename : '').toLowerCase()));
+      list.innerHTML = _sampleVoices.map(s => {
+        const loaded = existingNames.has(s.file.toLowerCase());
+        return `<button onclick="${loaded ? '' : `useSampleVoiceFromSettings('${s.path.replace(/'/g, "\\'")}','${s.name.replace(/'/g, "\\'")}')`}"
+          title="${loaded ? 'Already loaded' : 'Click to create voice profile'}"
+          style="padding:4px 10px;border-radius:6px;border:1px solid ${loaded ? 'var(--accent)' : 'var(--border)'};
+          background:${loaded ? 'rgba(78,205,196,0.08)' : 'var(--bg-darkest)'};
+          color:${loaded ? 'var(--accent)' : 'var(--text-secondary)'};font-size:10px;font-weight:500;
+          font-family:inherit;cursor:${loaded ? 'default' : 'pointer'};transition:all 0.2s;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;opacity:${loaded ? '0.7' : '1'}">${loaded ? '&#10003; ' : ''}${s.name}</button>`;
+      }).join('');
+    }
+
+    async function useSampleVoiceFromSettings(path, name) {
+      await useSampleVoice(path, name);
+      loadSettingsSampleList(); // refresh to show checkmark
+    }
+
+    async function loadAllSampleVoices() {
+      if (!_sampleVoices.length) { toast('No sample voices found', 'error'); return; }
+      const btn = $('#load-all-samples-btn');
+      const status = $('#load-samples-status');
+      const existingFiles = new Set(STATE.voiceProfiles.filter(p => p.source === 'sample').map(p => p.original_filename?.toLowerCase()));
+      const toLoad = _sampleVoices.filter(s => !existingFiles.has(s.file.toLowerCase()));
+
+      if (!toLoad.length) { toast('All sample voices already loaded'); return; }
+
+      btn.disabled = true;
+      btn.textContent = `Loading 0/${toLoad.length}...`;
+      status.style.display = 'block';
+      status.textContent = '';
+
+      let loaded = 0;
+      for (const s of toLoad) {
+        try {
+          const res = await fetch('/api/voices/from-sample', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: s.path, name: s.name, transcript: '' }),
+          });
+          if (res.ok) {
+            const profile = await res.json();
+            STATE.voiceProfiles.unshift(profile);
+            loaded++;
+          }
+        } catch {}
+        btn.textContent = `Loading ${loaded}/${toLoad.length}...`;
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Load All Sample Voices';
+      status.textContent = `${loaded} voice profiles created`;
+      setTimeout(() => { status.style.display = 'none'; }, 3000);
+
+      if (loaded > 0) {
+        if (!STATE.selectedVoice) {
+          STATE.selectedVoice = STATE.voiceProfiles[0].id;
+          localStorage.setItem('tada-voice', STATE.selectedVoice);
+        }
+        renderVoiceProfiles();
+        loadSettingsSampleList();
+        toast(`${loaded} sample voices loaded`);
+      }
     }
 
     // ======================================================================
