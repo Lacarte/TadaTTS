@@ -2760,9 +2760,9 @@
       activeVersion: 'original',
       processingStep: 0,
       histFilter: 'all',
-      stepEnhance: localStorage.getItem('tada-step-enhance') !== 'false',
-      stepClean: localStorage.getItem('tada-step-clean') !== 'false',
-      stepMp3: localStorage.getItem('tada-step-mp3') !== 'false',
+      stepEnhance: localStorage.getItem('tada-step-enhance') === 'true',
+      stepClean: localStorage.getItem('tada-step-clean') === 'true',
+      stepMp3: localStorage.getItem('tada-step-mp3') === 'true',
     };
 
     const $ = s => document.querySelector(s);
