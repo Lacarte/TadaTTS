@@ -6,6 +6,13 @@ echo Starting TADA TTS Studio...
 
 call venv\Scripts\activate.bat
 
+:: Kill any leftover zombie servers on ports 5000-5009
+for /L %%p in (5000,1,5009) do (
+    for /f "tokens=5" %%a in ('netstat -ano ^| findstr "LISTENING" ^| findstr ":%%p "') do (
+        taskkill /PID %%a /F >nul 2>&1
+    )
+)
+
 :: Find available port starting from 5000
 set PORT=5000
 :check_port
@@ -16,35 +23,15 @@ if %ERRORLEVEL% equ 0 (
 )
 
 echo Found available port: %PORT%
+echo.
+echo   TADA TTS Studio
+echo   http://localhost:%PORT%
+echo.
+echo   Close this window to stop the server.
+echo.
 
-:: Start backend — use cmd /k so the window stays open if it crashes
-start "TADA TTS Backend" cmd /k "venv\Scripts\python.exe backend.py --port %PORT%"
+:: Open browser after a short delay (in background)
+start "" cmd /c "timeout /t 5 /nobreak >nul && start http://localhost:%PORT%"
 
-:: Wait for server to respond (up to 60 seconds — TADA models take longer to load)
-echo Waiting for server to start...
-set TRIES=0
-:wait_loop
-if %TRIES% geq 60 (
-    echo ERROR: Server did not start within 60 seconds.
-    echo Check the TADA TTS Backend window for errors.
-    pause
-    exit /b 1
-)
-timeout /t 1 /nobreak >nul
-curl -s http://localhost:%PORT%/api/health >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    set /a TRIES+=1
-    goto wait_loop
-)
-
-echo Server is ready!
-
-:: Open browser
-start http://localhost:%PORT%
-
-echo TADA TTS Studio is running at http://localhost:%PORT%
-echo Press any key to stop...
-pause
-
-:: Cleanup
-taskkill /FI "WINDOWTITLE eq TADA TTS Backend*" /F >nul 2>&1
+:: Run server in THIS console — closing the window kills it
+venv\Scripts\python.exe backend.py --port %PORT%
