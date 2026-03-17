@@ -2039,6 +2039,157 @@
           </div>
         </div>
 
+        <!-- TADA Inference Controls (collapsible) -->
+        <section class="card p-5 mb-4 reveal" style="animation-delay:0.09s">
+          <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleAdvancedControls()">
+            <div style="display:flex;align-items:center;gap:8px">
+              <label class="block text-[10px] font-bold uppercase tracking-[0.15em]" style="color:var(--text-muted);margin:0;cursor:pointer">TADA Inference Controls</label>
+              <button onclick="event.stopPropagation()" title="These parameters control how TADA generates speech. Hover each control for details. Reference: huggingface.co/spaces/HumeAI/tada"
+                style="width:16px;height:16px;border-radius:50%;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:9px;font-weight:700;cursor:help;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace">i</button>
+            </div>
+            <svg id="advanced-chevron" width="12" height="12" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" style="transition:transform 0.2s"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <div id="advanced-controls-panel" style="display:none;margin-top:12px">
+
+            <!-- Model -->
+            <div class="mb-3">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <label style="font-size:11px;color:var(--text-secondary)">Model</label>
+                <span id="model-size" class="font-mono" style="font-size:10px;color:var(--accent)">~4GB</span>
+              </div>
+              <select id="model-select" class="input-field" style="width:100%;padding:8px 12px;font-size:12px">
+                <option value="tada-1b">TADA 1B — English</option>
+                <option value="tada-3b">TADA 3B — Multilingual</option>
+              </select>
+            </div>
+
+            <!-- Speed -->
+            <div class="mb-3" title="Playback speed multiplier. Affects generation pacing.">
+              <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">Speed</label>
+              <select id="speed-select" class="input-field"
+                style="width:100%;padding:8px 12px;font-size:12px;font-family:'JetBrains Mono',monospace"
+                onchange="localStorage.setItem('tada-speed',this.value)">
+              </select>
+            </div>
+
+            <!-- Acoustic CFG Scale -->
+            <div class="mb-3" title="Controls how closely the output follows the voice prompt. Higher = more faithful to reference voice but less natural.">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <label style="font-size:11px;color:var(--text-secondary)">Acoustic CFG Scale</label>
+                <span id="val-acoustic-cfg" class="font-mono" style="font-size:11px;color:var(--accent)">1.6</span>
+              </div>
+              <input type="range" id="ctrl-acoustic-cfg" min="1.0" max="3.0" step="0.1" value="1.6"
+                oninput="$('#val-acoustic-cfg').textContent=this.value;saveAdvanced()" style="width:100%">
+            </div>
+
+            <!-- Duration CFG Scale -->
+            <div class="mb-3" title="Controls pacing/duration adherence. Higher = stricter timing, lower = more natural variation.">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <label style="font-size:11px;color:var(--text-secondary)">Duration CFG Scale</label>
+                <span id="val-duration-cfg" class="font-mono" style="font-size:11px;color:var(--accent)">1.0</span>
+              </div>
+              <input type="range" id="ctrl-duration-cfg" min="1.0" max="3.0" step="0.1" value="1.0"
+                oninput="$('#val-duration-cfg').textContent=this.value;saveAdvanced()" style="width:100%">
+            </div>
+
+            <!-- Noise Temperature -->
+            <div class="mb-3" title="Randomness of the acoustic generation. Lower = more deterministic, higher = more expressive/varied.">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <label style="font-size:11px;color:var(--text-secondary)">Noise Temperature</label>
+                <span id="val-noise-temp" class="font-mono" style="font-size:11px;color:var(--accent)">0.9</span>
+              </div>
+              <input type="range" id="ctrl-noise-temp" min="0.4" max="1.2" step="0.1" value="0.9"
+                oninput="$('#val-noise-temp').textContent=this.value;saveAdvanced()" style="width:100%">
+            </div>
+
+            <!-- Flow Matching Steps -->
+            <div class="mb-3" title="Number of diffusion steps for audio generation. More steps = better quality but slower. 10 is fast, 20 is balanced, 50 is highest quality.">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <label style="font-size:11px;color:var(--text-secondary)">Flow Matching Steps</label>
+                <span id="val-flow-steps" class="font-mono" style="font-size:11px;color:var(--accent)">10</span>
+              </div>
+              <input type="range" id="ctrl-flow-steps" min="5" max="50" step="5" value="10"
+                oninput="$('#val-flow-steps').textContent=this.value;saveAdvanced()" style="width:100%">
+            </div>
+
+            <!-- Speed Up Factor -->
+            <div class="mb-3" title="Speed up speech rate. 0 = disabled (natural speed). Higher values make speech faster. Affects prosody.">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <label style="font-size:11px;color:var(--text-secondary)">Speed Up Factor</label>
+                <span id="val-speed-factor" class="font-mono" style="font-size:11px;color:var(--accent)">0.0</span>
+              </div>
+              <input type="range" id="ctrl-speed-factor" min="0.0" max="3.0" step="0.1" value="0.0"
+                oninput="$('#val-speed-factor').textContent=this.value;saveAdvanced()" style="width:100%">
+            </div>
+
+            <!-- Extra Text Steps -->
+            <div class="mb-3" title="Additional text tokens to generate beyond the input. Can improve naturalness at sentence endings. 0 = no extra.">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <label style="font-size:11px;color:var(--text-secondary)">Extra Text Steps</label>
+                <span id="val-extra-steps" class="font-mono" style="font-size:11px;color:var(--accent)">0</span>
+              </div>
+              <input type="range" id="ctrl-extra-steps" min="0" max="200" step="1" value="0"
+                oninput="$('#val-extra-steps').textContent=this.value;saveAdvanced()" style="width:100%">
+            </div>
+
+            <!-- Text-Only Logit Scale -->
+            <div class="mb-3" title="Blends text-only logits with audio-conditioned logits. 0 = disabled. Higher values add text-based correction to improve pronunciation.">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <label style="font-size:11px;color:var(--text-secondary)">Text-Only Logit Scale</label>
+                <span id="val-text-logit" class="font-mono" style="font-size:11px;color:var(--accent)">0.0</span>
+              </div>
+              <input type="range" id="ctrl-text-logit" min="0.0" max="5.0" step="0.1" value="0.0"
+                oninput="$('#val-text-logit').textContent=this.value;saveAdvanced()" style="width:100%">
+            </div>
+
+            <!-- Acoustic Candidates -->
+            <div class="mb-3" title="Generate multiple audio candidates and pick the best one. More = better quality but slower (linear scaling). 1 = no ranking.">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <label style="font-size:11px;color:var(--text-secondary)">Acoustic Candidates</label>
+                <span id="val-candidates" class="font-mono" style="font-size:11px;color:var(--accent)">1</span>
+              </div>
+              <input type="range" id="ctrl-candidates" min="1" max="16" step="1" value="1"
+                oninput="$('#val-candidates').textContent=this.value;saveAdvanced()" style="width:100%">
+            </div>
+
+            <!-- Scorer -->
+            <div class="mb-3" title="How to rank multiple acoustic candidates. Likelihood = probability score. Speaker Verification = match to reference voice. Duration Median = prefer median-length output.">
+              <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">Candidate Scorer</label>
+              <select id="ctrl-scorer" class="input-field" onchange="saveAdvanced()"
+                style="width:100%;padding:8px 12px;font-size:12px">
+                <option value="likelihood">Likelihood</option>
+                <option value="spkr_verification">Speaker Verification</option>
+                <option value="duration_median">Duration Median</option>
+              </select>
+            </div>
+
+            <!-- Negative Condition Source -->
+            <div class="mb-3" title="Source for classifier-free guidance negative condition. 'negative_step_output' works best in most cases.">
+              <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">Negative Condition</label>
+              <select id="ctrl-neg-source" class="input-field" onchange="saveAdvanced()"
+                style="width:100%;padding:8px 12px;font-size:12px">
+                <option value="negative_step_output">Negative Step Output</option>
+                <option value="prompt">Prompt</option>
+                <option value="zero">Zero</option>
+              </select>
+            </div>
+
+            <!-- Normalize Text -->
+            <div class="mb-3">
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer" title="Apply TADA's built-in text normalization (numbers, abbreviations, etc.) before generation.">
+                <input type="checkbox" id="ctrl-normalize" checked onchange="saveAdvanced()"
+                  style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+                <span style="font-size:11px;color:var(--text-secondary)">Normalize text (TADA built-in)</span>
+              </label>
+            </div>
+
+            <!-- Reset -->
+            <button onclick="resetAdvancedDefaults()" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:11px;font-weight:500;font-family:inherit;cursor:pointer;margin-top:4px">
+              Reset to Defaults
+            </button>
+          </div>
+        </section>
+
         <!-- Prompt -->
         <section class="card p-5 mb-5 reveal" style="animation-delay:0.1s">
           <label class="block text-[10px] font-bold uppercase tracking-[0.15em] mb-2.5"
@@ -2340,168 +2491,6 @@
               </div>
               <span class="font-mono" style="font-size:9px;color:var(--text-muted)">Step 5</span>
             </label>
-          </div>
-        </section>
-
-        <!-- TADA Advanced Controls -->
-        <section class="card p-5 mb-4">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;cursor:pointer" onclick="toggleAdvancedControls()">
-            <div style="display:flex;align-items:center;gap:8px">
-              <label class="block text-[10px] font-bold uppercase tracking-[0.15em]" style="color:var(--text-muted);margin:0;cursor:pointer">TADA Inference Controls</label>
-              <button onclick="event.stopPropagation()" title="These parameters control how TADA generates speech. Hover each control for details. Reference: huggingface.co/spaces/HumeAI/tada"
-                style="width:16px;height:16px;border-radius:50%;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:9px;font-weight:700;cursor:help;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace">i</button>
-            </div>
-            <svg id="advanced-chevron" width="12" height="12" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" style="transition:transform 0.2s"><path d="M6 9l6 6 6-6"/></svg>
-          </div>
-          <div id="advanced-controls-panel" style="display:none">
-            <p class="text-xs mb-4" style="color:var(--text-secondary)">Fine-tune generation quality and style. Defaults work well for most cases.</p>
-
-            <!-- Model -->
-            <div class="mb-3">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                <label style="font-size:11px;color:var(--text-secondary)">Model</label>
-                <span id="model-size" class="font-mono" style="font-size:10px;color:var(--accent)">~4GB</span>
-              </div>
-              <div style="position:relative">
-                <select id="model-select" class="input-field" style="width:100%;padding:8px 12px;font-size:12px">
-                  <option value="tada-1b">TADA 1B — English</option>
-                  <option value="tada-3b">TADA 3B — Multilingual</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Speed -->
-            <div class="mb-3" title="Playback speed multiplier. Affects generation pacing.">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                <label style="font-size:11px;color:var(--text-secondary)">Speed</label>
-              </div>
-              <div style="position:relative">
-                <select id="speed-select" class="input-field"
-                  style="width:100%;padding:8px 12px;font-size:12px;font-family:'JetBrains Mono',monospace"
-                  onchange="localStorage.setItem('tada-speed',this.value)">
-                </select>
-              </div>
-            </div>
-
-            <!-- Acoustic CFG Scale -->
-            <div class="mb-3" title="Controls how closely the output follows the voice prompt. Higher = more faithful to reference voice but less natural.">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                <label style="font-size:11px;color:var(--text-secondary)">Acoustic CFG Scale</label>
-                <span id="val-acoustic-cfg" class="font-mono" style="font-size:11px;color:var(--accent)">1.6</span>
-              </div>
-              <input type="range" id="ctrl-acoustic-cfg" min="1.0" max="3.0" step="0.1" value="1.6"
-                oninput="$('#val-acoustic-cfg').textContent=this.value;saveAdvanced()" style="width:100%">
-            </div>
-
-            <!-- Duration CFG Scale -->
-            <div class="mb-3" title="Controls pacing/duration adherence. Higher = stricter timing, lower = more natural variation.">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                <label style="font-size:11px;color:var(--text-secondary)">Duration CFG Scale</label>
-                <span id="val-duration-cfg" class="font-mono" style="font-size:11px;color:var(--accent)">1.0</span>
-              </div>
-              <input type="range" id="ctrl-duration-cfg" min="1.0" max="3.0" step="0.1" value="1.0"
-                oninput="$('#val-duration-cfg').textContent=this.value;saveAdvanced()" style="width:100%">
-            </div>
-
-            <!-- Noise Temperature -->
-            <div class="mb-3" title="Randomness of the acoustic generation. Lower = more deterministic, higher = more expressive/varied.">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                <label style="font-size:11px;color:var(--text-secondary)">Noise Temperature</label>
-                <span id="val-noise-temp" class="font-mono" style="font-size:11px;color:var(--accent)">0.9</span>
-              </div>
-              <input type="range" id="ctrl-noise-temp" min="0.4" max="1.2" step="0.1" value="0.9"
-                oninput="$('#val-noise-temp').textContent=this.value;saveAdvanced()" style="width:100%">
-            </div>
-
-            <!-- Flow Matching Steps -->
-            <div class="mb-3" title="Number of diffusion steps for audio generation. More steps = better quality but slower. 10 is fast, 20 is balanced, 50 is highest quality.">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                <label style="font-size:11px;color:var(--text-secondary)">Flow Matching Steps</label>
-                <span id="val-flow-steps" class="font-mono" style="font-size:11px;color:var(--accent)">10</span>
-              </div>
-              <input type="range" id="ctrl-flow-steps" min="5" max="50" step="5" value="10"
-                oninput="$('#val-flow-steps').textContent=this.value;saveAdvanced()" style="width:100%">
-            </div>
-
-            <!-- Speed Up Factor -->
-            <div class="mb-3" title="Speed up speech rate. 0 = disabled (natural speed). Higher values make speech faster. Affects prosody.">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                <label style="font-size:11px;color:var(--text-secondary)">Speed Up Factor</label>
-                <span id="val-speed-factor" class="font-mono" style="font-size:11px;color:var(--accent)">0.0</span>
-              </div>
-              <input type="range" id="ctrl-speed-factor" min="0.0" max="3.0" step="0.1" value="0.0"
-                oninput="$('#val-speed-factor').textContent=this.value;saveAdvanced()" style="width:100%">
-            </div>
-
-            <!-- Extra Text Steps -->
-            <div class="mb-3" title="Additional text tokens to generate beyond the input. Can improve naturalness at sentence endings. 0 = no extra.">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                <label style="font-size:11px;color:var(--text-secondary)">Extra Text Steps</label>
-                <span id="val-extra-steps" class="font-mono" style="font-size:11px;color:var(--accent)">0</span>
-              </div>
-              <input type="range" id="ctrl-extra-steps" min="0" max="200" step="1" value="0"
-                oninput="$('#val-extra-steps').textContent=this.value;saveAdvanced()" style="width:100%">
-            </div>
-
-            <!-- Text-Only Logit Scale -->
-            <div class="mb-3" title="Blends text-only logits with audio-conditioned logits. 0 = disabled. Higher values add text-based correction to improve pronunciation.">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                <label style="font-size:11px;color:var(--text-secondary)">Text-Only Logit Scale</label>
-                <span id="val-text-logit" class="font-mono" style="font-size:11px;color:var(--accent)">0.0</span>
-              </div>
-              <input type="range" id="ctrl-text-logit" min="0.0" max="5.0" step="0.1" value="0.0"
-                oninput="$('#val-text-logit').textContent=this.value;saveAdvanced()" style="width:100%">
-            </div>
-
-            <!-- Acoustic Candidates -->
-            <div class="mb-3" title="Generate multiple audio candidates and pick the best one. More = better quality but slower (linear scaling). 1 = no ranking.">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                <label style="font-size:11px;color:var(--text-secondary)">Acoustic Candidates</label>
-                <span id="val-candidates" class="font-mono" style="font-size:11px;color:var(--accent)">1</span>
-              </div>
-              <input type="range" id="ctrl-candidates" min="1" max="16" step="1" value="1"
-                oninput="$('#val-candidates').textContent=this.value;saveAdvanced()" style="width:100%">
-            </div>
-
-            <!-- Scorer -->
-            <div class="mb-3" title="How to rank multiple acoustic candidates. Likelihood = probability score. Speaker Verification = match to reference voice. Duration Median = prefer median-length output.">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                <label style="font-size:11px;color:var(--text-secondary)">Candidate Scorer</label>
-              </div>
-              <select id="ctrl-scorer" class="input-field" onchange="saveAdvanced()"
-                style="width:100%;padding:8px 12px;font-size:12px">
-                <option value="likelihood">Likelihood</option>
-                <option value="spkr_verification">Speaker Verification</option>
-                <option value="duration_median">Duration Median</option>
-              </select>
-            </div>
-
-            <!-- Negative Condition Source -->
-            <div class="mb-3" title="Source for classifier-free guidance negative condition. 'negative_step_output' works best in most cases.">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                <label style="font-size:11px;color:var(--text-secondary)">Negative Condition</label>
-              </div>
-              <select id="ctrl-neg-source" class="input-field" onchange="saveAdvanced()"
-                style="width:100%;padding:8px 12px;font-size:12px">
-                <option value="negative_step_output">Negative Step Output</option>
-                <option value="prompt">Prompt</option>
-                <option value="zero">Zero</option>
-              </select>
-            </div>
-
-            <!-- Normalize Text -->
-            <div class="mb-3">
-              <label style="display:flex;align-items:center;gap:10px;cursor:pointer" title="Apply TADA's built-in text normalization (numbers, abbreviations, etc.) before generation.">
-                <input type="checkbox" id="ctrl-normalize" checked onchange="saveAdvanced()"
-                  style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
-                <span style="font-size:11px;color:var(--text-secondary)">Normalize text (TADA built-in)</span>
-              </label>
-            </div>
-
-            <!-- Reset -->
-            <button onclick="resetAdvancedDefaults()" style="width:100%;padding:8px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:11px;font-weight:500;font-family:inherit;cursor:pointer;margin-top:4px">
-              Reset to Defaults
-            </button>
           </div>
         </section>
 
