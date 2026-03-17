@@ -1932,9 +1932,9 @@
           <div id="sample-voices-section" style="margin-bottom:12px">
             <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:8px" onclick="toggleSampleVoices()">
               <label style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-muted);cursor:pointer">Sample Voices</label>
-              <svg id="sample-voices-chevron" width="10" height="10" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" style="transition:transform 0.2s"><path d="M6 9l6 6 6-6"/></svg>
+              <svg id="sample-voices-chevron" width="10" height="10" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" style="transition:transform 0.2s;transform:rotate(180deg)"><path d="M6 9l6 6 6-6"/></svg>
             </div>
-            <div id="sample-voices-list" style="display:none;flex-wrap:wrap;gap:4px"></div>
+            <div id="sample-voices-list" style="display:flex;flex-wrap:wrap;gap:4px"></div>
           </div>
 
           <!-- Voice Profiles List -->
@@ -3103,14 +3103,29 @@
     function renderSampleVoices() {
       const list = $('#sample-voices-list');
       if (!list || !_sampleVoices.length) return;
-      list.innerHTML = _sampleVoices.map(s => `
-        <button onclick="useSampleVoice('${s.path.replace(/'/g, "\\'")}','${s.name.replace(/'/g, "\\'")}')"
-          title="${s.name}" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);
-          background:var(--bg-darkest);color:var(--text-secondary);font-size:10px;font-weight:500;
-          font-family:inherit;cursor:pointer;transition:all 0.2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px"
-          onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
-          onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-secondary)'">${s.name}</button>
-      `).join('');
+      // Check which samples are already loaded as profiles
+      const existingFiles = new Set(STATE.voiceProfiles.filter(p => p.source === 'sample').map(p => (p.original_filename || '').toLowerCase()));
+      list.innerHTML = '';
+      _sampleVoices.forEach((s, i) => {
+        const loaded = existingFiles.has(s.file.toLowerCase());
+        const btn = document.createElement('button');
+        btn.title = loaded ? `${s.name} (already loaded)` : s.name;
+        btn.textContent = (loaded ? '\u2713 ' : '') + s.name;
+        btn.style.cssText = `padding:4px 10px;border-radius:6px;border:1px solid ${loaded ? 'var(--accent)' : 'var(--border)'};
+          background:${loaded ? 'rgba(78,205,196,0.08)' : 'var(--bg-darkest)'};color:${loaded ? 'var(--accent)' : 'var(--text-secondary)'};
+          font-size:10px;font-weight:500;font-family:inherit;cursor:${loaded ? 'default' : 'pointer'};
+          transition:all 0.2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;opacity:${loaded ? '0.7' : '1'}`;
+        if (!loaded) {
+          btn.onmouseover = () => { btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent)'; };
+          btn.onmouseout = () => { btn.style.borderColor = 'var(--border)'; btn.style.color = 'var(--text-secondary)'; };
+          btn.onclick = async () => {
+            btn.disabled = true; btn.textContent = '...';
+            await useSampleVoice(s.path, s.name);
+            renderSampleVoices(); // refresh to show checkmark
+          };
+        }
+        list.appendChild(btn);
+      });
     }
 
     function toggleSampleVoices() {
