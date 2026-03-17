@@ -1934,8 +1934,25 @@
               <label style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-muted);cursor:pointer">Sample Voices</label>
               <svg id="sample-voices-chevron" width="10" height="10" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" style="transition:transform 0.2s;transform:rotate(180deg)"><path d="M6 9l6 6 6-6"/></svg>
             </div>
-            <div id="sample-voices-list" style="display:flex;flex-wrap:wrap;gap:4px"></div>
-            <div style="margin-top:8px;display:flex;gap:6px">
+            <div id="sample-voices-list" style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto"></div>
+            <div id="sample-voice-selected-panel" style="display:none;margin-top:10px;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg-darkest)">
+              <label style="display:block;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-muted);margin-bottom:6px">Selected Sample</label>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                <div style="flex:1;min-width:0">
+                  <div id="sample-voice-selected-name" style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+                  <div id="sample-voice-selected-file" style="font-size:10px;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+                </div>
+                <div id="sample-voice-selected-preview-wrap" style="display:flex;align-items:center"></div>
+              </div>
+              <input type="text" id="sample-voice-name-input" class="input-field" placeholder="Voice name" style="width:100%;padding:8px 12px;font-size:12px;margin-bottom:6px">
+              <textarea id="sample-voice-transcript-input" class="input-field" placeholder="Transcript of the reference audio (optional for English, required for other languages)" style="width:100%;padding:8px 12px;font-size:12px;min-height:72px;resize:vertical;margin-bottom:8px"></textarea>
+              <p id="sample-voice-selected-status" style="display:none;font-size:10px;margin:0 0 8px"></p>
+              <div style="display:flex;gap:8px">
+                <button id="create-sample-voice-btn" onclick="createSelectedSampleVoice()" style="flex:1;padding:8px;border-radius:6px;background:var(--accent);color:#0a0e13;font-size:12px;font-weight:600;font-family:inherit;border:none;cursor:pointer">Create Voice Profile</button>
+                <button onclick="clearSelectedSampleVoice()" style="padding:8px 16px;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--text-muted);font-size:12px;font-family:inherit;cursor:pointer">Clear</button>
+              </div>
+            </div>
+            <div id="load-all-samples-wrap" style="margin-top:8px;display:flex;gap:6px">
               <button onclick="loadAllSampleVoices()" id="load-all-samples-btn"
                 style="padding:5px 12px;border-radius:6px;background:rgba(78,205,196,0.1);border:1px solid rgba(78,205,196,0.2);color:var(--accent);font-size:10px;font-weight:600;font-family:inherit;cursor:pointer;transition:all 0.2s">
                 Load All
@@ -2283,17 +2300,7 @@
           </div>
         </div>
 
-        <!-- Mode Toggle: Generate / Listen -->
-        <div class="mode-toggle reveal" style="animation-delay:0.13s;margin-bottom:10px">
-          <button class="mode-toggle-btn mode-generate" data-active="true" onclick="setGenMode('generate')">
-            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M5 10l7-7 7 7"/></svg>
-            Generate
-          </button>
-          <button class="mode-toggle-btn mode-listen" data-active="false" onclick="setGenMode('listen')">
-            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0118 0v6"/><path d="M21 19a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3v5z"/><path d="M3 19a2 2 0 002 2h1a2 2 0 002-2v-3a2 2 0 00-2-2H3v5z"/></svg>
-            Listen
-          </button>
-        </div>
+        <!-- Mode: Generate only (TADA doesn't support streaming) -->
 
         <!-- Generate + Abort Buttons -->
         <div style="display:flex;gap:10px;align-items:stretch">
@@ -2756,8 +2763,12 @@
         b.style.color = isActive ? 'var(--accent)' : 'var(--text-muted)';
         b.classList.toggle('active', isActive);
       });
+      if (page === 'generate' && !_sampleVoices.length) loadSampleVoices();
       // Load settings sample list when opening settings
-      if (page === 'settings') loadSettingsSampleList();
+      if (page === 'settings') {
+        if (!_sampleVoices.length) loadSampleVoices().finally(() => loadSettingsSampleList());
+        else loadSettingsSampleList();
+      }
     }
     function toggleSidebar() {
       document.getElementById('sidebar').classList.toggle('collapsed');
@@ -2921,6 +2932,7 @@
         const savedPrompt = localStorage.getItem('tada-prompt');
         if (savedPrompt) { $('#prompt-input').value = _stripBrackets(savedPrompt); updateCounts(); }
         renderVoiceProfiles();
+        await loadSampleVoices();
         initStepToggles();
         setGenMode(STATE.genMode, true);
         loadAdvancedFromStorage();
@@ -3082,87 +3094,322 @@
     // Sample Voices (Presets)
     // ======================================================================
     let _sampleVoices = [];
+    let _samplePreviewAudio = null;
+    let _samplePreviewPath = '';
+    let _selectedSampleVoicePath = '';
+
+    function getSampleVoicePreviewUrl(path) {
+      return `/api/sample-voices/file/${String(path || '').split('/').map(encodeURIComponent).join('/')}`;
+    }
+
+    function getSampleVoiceByPath(path) {
+      return _sampleVoices.find(s => s.path === path) || null;
+    }
+
+    function refreshSampleVoiceViews() {
+      renderSampleVoices();
+      renderSelectedSampleVoice();
+      loadSettingsSampleList();
+    }
+
+    function stopSampleVoicePreview(refresh = true) {
+      if (_samplePreviewAudio) {
+        _samplePreviewAudio.pause();
+        _samplePreviewAudio.currentTime = 0;
+      }
+      _samplePreviewAudio = null;
+      _samplePreviewPath = '';
+      if (refresh) refreshSampleVoiceViews();
+    }
+
+    async function toggleSampleVoicePreview(sample) {
+      const path = sample?.path || '';
+      if (!path) return;
+      if (_samplePreviewPath === path && _samplePreviewAudio && !_samplePreviewAudio.paused) {
+        stopSampleVoicePreview();
+        return;
+      }
+      if (_samplePreviewAudio) stopSampleVoicePreview(false);
+
+      const audio = new Audio(getSampleVoicePreviewUrl(path));
+      audio.preload = 'auto';
+      _samplePreviewAudio = audio;
+      _samplePreviewPath = path;
+      audio.addEventListener('ended', () => {
+        if (_samplePreviewAudio === audio) stopSampleVoicePreview();
+      });
+      audio.addEventListener('error', () => {
+        if (_samplePreviewAudio === audio) {
+          stopSampleVoicePreview();
+          toast(`Failed to play "${sample.name}"`, 'error');
+        }
+      });
+
+      try {
+        await audio.play();
+        refreshSampleVoiceViews();
+      } catch (e) {
+        stopSampleVoicePreview(false);
+        toast(`Failed to play "${sample.name}"`, 'error');
+        refreshSampleVoiceViews();
+      }
+    }
+
+    function fillSelectedSampleVoiceFields(sample) {
+      const nameInput = $('#sample-voice-name-input');
+      const transcriptInput = $('#sample-voice-transcript-input');
+      if (nameInput) nameInput.value = sample?.name || '';
+      if (transcriptInput) transcriptInput.value = sample?.transcript || '';
+    }
+
+    function syncSelectedSampleVoice(autoSelect = true) {
+      const current = getSampleVoiceByPath(_selectedSampleVoicePath);
+      if (current) return current;
+      _selectedSampleVoicePath = '';
+      if (!_sampleVoices.length) {
+        fillSelectedSampleVoiceFields(null);
+        return null;
+      }
+      if (!autoSelect) {
+        fillSelectedSampleVoiceFields(null);
+        return null;
+      }
+      const loadedSampleKeys = getLoadedSampleKeys();
+      const nextSample = _sampleVoices.find(s => !isSampleVoiceLoaded(s, loadedSampleKeys)) || _sampleVoices[0];
+      _selectedSampleVoicePath = nextSample?.path || '';
+      fillSelectedSampleVoiceFields(nextSample || null);
+      return nextSample || null;
+    }
+
+    function selectSampleVoice(path) {
+      const sample = getSampleVoiceByPath(path);
+      if (!sample) return;
+      _selectedSampleVoicePath = sample.path;
+      fillSelectedSampleVoiceFields(sample);
+      renderSampleVoices();
+      renderSelectedSampleVoice();
+    }
+
+    function clearSelectedSampleVoice() {
+      _selectedSampleVoicePath = '';
+      fillSelectedSampleVoiceFields(null);
+      renderSampleVoices();
+      renderSelectedSampleVoice();
+    }
+
+    function createSamplePreviewButton(sample, compact = false) {
+      const playing = _samplePreviewPath === sample.path && _samplePreviewAudio && !_samplePreviewAudio.paused;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.title = playing ? `Stop preview: ${sample.name}` : `Play preview: ${sample.name}`;
+      btn.setAttribute('aria-label', btn.title);
+      btn.innerHTML = playing
+        ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 6h4v12H7zm6 0h4v12h-4z"/></svg>'
+        : '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+      btn.style.cssText = `display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+        width:${compact ? '24px' : '28px'};height:${compact ? '24px' : '28px'};border-radius:${compact ? '6px' : '7px'};
+        border:1px solid ${playing ? 'var(--accent)' : 'var(--border)'};background:${playing ? 'rgba(78,205,196,0.12)' : 'var(--bg-darkest)'};
+        color:${playing ? 'var(--accent)' : 'var(--text-muted)'};cursor:pointer;transition:all 0.2s`;
+      btn.onmouseover = () => {
+        btn.style.borderColor = 'var(--accent)';
+        btn.style.color = 'var(--accent)';
+      };
+      btn.onmouseout = () => {
+        btn.style.borderColor = playing ? 'var(--accent)' : 'var(--border)';
+        btn.style.color = playing ? 'var(--accent)' : 'var(--text-muted)';
+      };
+      btn.onclick = e => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleSampleVoicePreview(sample);
+      };
+      return btn;
+    }
 
     async function loadSampleVoices() {
       try {
         const resp = await fetch('/api/samplevoices');
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         _sampleVoices = await resp.json();
+        syncSelectedSampleVoice(false);
         console.log('Sample voices loaded:', _sampleVoices.length);
-        renderSampleVoices();
+        refreshSampleVoiceViews();
       } catch (e) {
         console.error('Failed to load sample voices:', e);
         _sampleVoices = [];
-        renderSampleVoices();
+        _selectedSampleVoicePath = '';
+        fillSelectedSampleVoiceFields(null);
+        refreshSampleVoiceViews();
       }
+    }
+
+    function getLoadedSampleKeys() {
+      return new Set(
+        STATE.voiceProfiles
+          .filter(p => p.source === 'sample')
+          .flatMap(p => [p.sample_path, p.original_filename])
+          .filter(Boolean)
+          .map(v => String(v).toLowerCase())
+      );
+    }
+
+    function isSampleVoiceLoaded(sample, loadedKeys = getLoadedSampleKeys()) {
+      return [sample?.path, sample?.file]
+        .filter(Boolean)
+        .map(v => String(v).toLowerCase())
+        .some(v => loadedKeys.has(v));
+    }
+
+    function sampleCategoryLabel(category) {
+      const value = String(category || '').trim();
+      if (!value) return '';
+      return value.charAt(0).toUpperCase() + value.slice(1);
     }
 
     function renderSampleVoices() {
       const list = $('#sample-voices-list');
       if (!list || !_sampleVoices.length) {
-        if (list) list.innerHTML = '<p style="color:var(--text-muted);font-size:10px;padding:4px 0">No sample voices found. Add audio files to sample voices/&lt;lang&gt;/ folder.</p>';
+        if (list) list.innerHTML = '<p style="color:var(--text-muted);font-size:10px;padding:4px 0">No sample voices found. Add audio files to sample voices/&lt;lang&gt;/ or sample voices/&lt;lang&gt;/&lt;voice-id&gt;/.</p>';
         return;
       }
+      const selectedSample = syncSelectedSampleVoice(false);
       // Check which samples are already loaded as profiles
-      const existingFiles = new Set(STATE.voiceProfiles.filter(p => p.source === 'sample').map(p => (p.original_filename || '').toLowerCase()));
-      // Group by language
-      const byLang = {};
-      _sampleVoices.forEach(s => { (byLang[s.lang] = byLang[s.lang] || []).push(s); });
+      const loadedSampleKeys = getLoadedSampleKeys();
+      // Group by language and category
+      const grouped = {};
+      _sampleVoices.forEach(s => {
+        const category = s.category || '';
+        const key = `${s.lang}::${category}`;
+        (grouped[key] = grouped[key] || { lang: s.lang, category, voices: [] }).voices.push(s);
+      });
       list.innerHTML = '';
       const langNames = { en:'English', es:'Spanish', fr:'French', de:'German', it:'Italian', ja:'Japanese', zh:'Chinese', pt:'Portuguese', ar:'Arabic', pl:'Polish' };
-      for (const [lang, voices] of Object.entries(byLang).sort()) {
-        // Language header
-        if (Object.keys(byLang).length > 1) {
+      const groupEntries = Object.values(grouped).sort((a, b) =>
+        `${a.lang}|${a.category}`.localeCompare(`${b.lang}|${b.category}`)
+      );
+      for (const group of groupEntries) {
+        const lang = group.lang;
+        const category = group.category;
+        const voices = group.voices;
+        if (groupEntries.length > 1 || category) {
           const hdr = document.createElement('div');
           hdr.style.cssText = 'width:100%;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-top:6px;margin-bottom:2px';
-          hdr.textContent = `${langNames[lang] || lang} (${lang})`;
+          hdr.textContent = category ? `${langNames[lang] || lang} (${lang}) • ${sampleCategoryLabel(category)}` : `${langNames[lang] || lang} (${lang})`;
           list.appendChild(hdr);
         }
         voices.forEach(s => {
-          const loaded = existingFiles.has(s.file.toLowerCase());
+          const loaded = isSampleVoiceLoaded(s, loadedSampleKeys);
+          const selected = selectedSample && selectedSample.path === s.path;
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:6px;width:100%';
           const btn = document.createElement('button');
+          btn.type = 'button';
           btn.title = loaded ? `${s.name} (already loaded)` : `${s.name} [${lang}]`;
-          btn.innerHTML = (loaded ? '<span style="color:var(--accent)">\u2713</span> ' : '') +
-            `<span style="font-size:8px;font-weight:700;opacity:0.5;margin-right:3px">${lang.toUpperCase()}</span>${s.name}`;
-          btn.style.cssText = `display:inline-flex;align-items:center;padding:4px 10px;border-radius:6px;border:1px solid ${loaded ? 'var(--accent)' : 'var(--border)'};
-            background:${loaded ? 'rgba(78,205,196,0.08)' : 'var(--bg-darkest)'};color:${loaded ? 'var(--accent)' : 'var(--text-secondary)'};
-            font-size:10px;font-weight:500;font-family:inherit;cursor:${loaded ? 'default' : 'pointer'};
-            transition:all 0.2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;opacity:${loaded ? '0.7' : '1'}`;
-          if (!loaded) {
-            btn.onmouseover = () => { btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent)'; };
-            btn.onmouseout = () => { btn.style.borderColor = 'var(--border)'; btn.style.color = 'var(--text-secondary)'; };
-            btn.onclick = async () => {
-              btn.disabled = true; btn.innerHTML = '...';
-              await useSampleVoice(s.path, s.name);
-              renderSampleVoices();
-            };
-          }
-          list.appendChild(btn);
+          btn.innerHTML = `
+            <span style="font-size:8px;font-weight:700;opacity:0.6;min-width:${s.category ? '54px' : '20px'};flex-shrink:0">${s.category ? `${lang.toUpperCase()} ${sampleCategoryLabel(s.category).toUpperCase()}` : lang.toUpperCase()}</span>
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name}</span>
+            ${loaded ? '<span style="font-size:9px;color:var(--accent);flex-shrink:0">Loaded</span>' : ''}
+          `;
+          btn.style.cssText = `display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border-radius:8px;border:1px solid ${selected ? 'var(--accent)' : (loaded ? 'rgba(78,205,196,0.3)' : 'var(--border)')};
+            background:${selected ? 'rgba(78,205,196,0.10)' : (loaded ? 'rgba(78,205,196,0.05)' : 'var(--bg-darkest)')};color:${selected ? 'var(--text)' : (loaded ? 'var(--text-secondary)' : 'var(--text-secondary)')};
+            font-size:11px;font-weight:${selected ? '600' : '500'};font-family:inherit;cursor:pointer;transition:all 0.2s;opacity:${loaded && !selected ? '0.9' : '1'}`;
+          btn.onmouseover = () => {
+            if (!selected) btn.style.borderColor = 'var(--accent)';
+          };
+          btn.onmouseout = () => {
+            btn.style.borderColor = selected ? 'var(--accent)' : (loaded ? 'rgba(78,205,196,0.3)' : 'var(--border)');
+          };
+          btn.onclick = () => selectSampleVoice(s.path);
+          row.appendChild(btn);
+          row.appendChild(createSamplePreviewButton(s));
+          list.appendChild(row);
         });
+      }
+    }
+
+    function renderSelectedSampleVoice() {
+      const panel = $('#sample-voice-selected-panel');
+      const list = $('#sample-voices-list');
+      const sample = getSampleVoiceByPath(_selectedSampleVoicePath);
+      if (!panel) return;
+      if (!sample || (list && list.style.display === 'none')) {
+        panel.style.display = 'none';
+        return;
+      }
+
+      panel.style.display = 'block';
+      $('#sample-voice-selected-name').textContent = sample.name || sample.file || sample.path;
+      const metaParts = [];
+      if (sample.lang) metaParts.push((TADA_LANGUAGES[sample.lang] || sample.lang) + ` (${sample.lang})`);
+      if (sample.category) metaParts.push(sampleCategoryLabel(sample.category));
+      if (sample.path) metaParts.push(sample.path);
+      $('#sample-voice-selected-file').textContent = metaParts.join(' • ');
+      const previewWrap = $('#sample-voice-selected-preview-wrap');
+      if (previewWrap) {
+        previewWrap.innerHTML = '';
+        previewWrap.appendChild(createSamplePreviewButton(sample));
+      }
+
+      const loaded = isSampleVoiceLoaded(sample);
+      const status = $('#sample-voice-selected-status');
+      const createBtn = $('#create-sample-voice-btn');
+      if (status) {
+        status.style.display = '';
+        status.style.color = loaded ? 'var(--accent)' : 'var(--text-muted)';
+        status.textContent = loaded ? 'This sample already has a voice profile.' : 'Select this sample, review the transcript, then create the profile.';
+      }
+      if (createBtn) {
+        createBtn.disabled = loaded;
+        createBtn.textContent = loaded ? 'Already Added' : 'Create Voice Profile';
+        createBtn.style.opacity = loaded ? '0.65' : '1';
+        createBtn.style.cursor = loaded ? 'default' : 'pointer';
       }
     }
 
     function toggleSampleVoices() {
       const list = $('#sample-voices-list');
       const chevron = $('#sample-voices-chevron');
+      const panel = $('#sample-voice-selected-panel');
+      const footer = $('#load-all-samples-wrap');
       const open = list.style.display === 'none';
       list.style.display = open ? 'flex' : 'none';
+      if (panel) panel.style.display = open && getSampleVoiceByPath(_selectedSampleVoicePath) ? 'block' : 'none';
+      if (footer) footer.style.display = open ? 'flex' : 'none';
       chevron.style.transform = open ? 'rotate(180deg)' : '';
     }
 
-    async function useSampleVoice(path, name) {
+    async function createSelectedSampleVoice() {
+      const sample = getSampleVoiceByPath(_selectedSampleVoicePath);
+      if (!sample) { toast('Select a sample voice first', 'error'); return; }
+      if (isSampleVoiceLoaded(sample)) { toast('This sample already has a voice profile', 'info'); return; }
+      const name = $('#sample-voice-name-input')?.value.trim() || sample.name;
+      const transcript = $('#sample-voice-transcript-input')?.value.trim() || '';
+      await useSampleVoice(sample.path, name, transcript);
+    }
+
+    async function useSampleVoice(path, name, transcript = '') {
       try {
         const res = await fetch('/api/voices/from-sample', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path, name, transcript: '' }),
+          body: JSON.stringify({ path, name, transcript }),
         });
-        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Failed'); }
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          if (res.status === 409 && d.profile) {
+            const exists = STATE.voiceProfiles.some(p => p.id === d.profile.id);
+            if (!exists) STATE.voiceProfiles.unshift(d.profile);
+            renderVoiceProfiles();
+            refreshSampleVoiceViews();
+          }
+          throw new Error(d.error || 'Failed');
+        }
         const profile = await res.json();
         STATE.voiceProfiles.unshift(profile);
         STATE.selectedVoice = profile.id;
         localStorage.setItem('tada-voice', profile.id);
         renderVoiceProfiles();
+        refreshSampleVoiceViews();
         toast(`Voice "${name}" added`);
       } catch (e) { toast(e.message || 'Failed to add sample voice', 'error'); }
     }
@@ -3172,25 +3419,45 @@
       const list = $('#settings-sample-list');
       if (!list) return;
       if (!_sampleVoices.length) {
-        list.innerHTML = '<p style="color:var(--text-muted);font-size:11px">No sample voices found in sample voices/ folder.</p>';
+        list.innerHTML = '<p style="color:var(--text-muted);font-size:11px">No sample voices found in sample voices/ subfolders.</p>';
         return;
       }
       // Check which are already loaded as profiles
-      const existingNames = new Set(STATE.voiceProfiles.map(p => (p.source === 'sample' ? p.original_filename : '').toLowerCase()));
-      list.innerHTML = _sampleVoices.map(s => {
-        const loaded = existingNames.has(s.file.toLowerCase());
-        return `<button onclick="${loaded ? '' : `useSampleVoiceFromSettings('${s.path.replace(/'/g, "\\'")}','${s.name.replace(/'/g, "\\'")}')`}"
-          title="${loaded ? 'Already loaded' : 'Click to create voice profile'}"
-          style="padding:4px 10px;border-radius:6px;border:1px solid ${loaded ? 'var(--accent)' : 'var(--border)'};
+      const loadedSampleKeys = getLoadedSampleKeys();
+      list.innerHTML = '';
+      let lastHeader = '';
+      _sampleVoices.forEach(s => {
+        const header = `${TADA_LANGUAGES[s.lang] || s.lang}${s.category ? ` • ${sampleCategoryLabel(s.category)}` : ''}`;
+        if (header !== lastHeader) {
+          const hdr = document.createElement('div');
+          hdr.style.cssText = 'width:100%;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-top:6px;margin-bottom:2px';
+          hdr.textContent = header;
+          list.appendChild(hdr);
+          lastHeader = header;
+        }
+        const loaded = isSampleVoiceLoaded(s, loadedSampleKeys);
+        const row = document.createElement('div');
+        row.style.cssText = 'display:inline-flex;align-items:center;gap:4px;max-width:260px';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.title = loaded ? 'Already loaded' : 'Click to create voice profile';
+        btn.style.cssText = `padding:4px 10px;border-radius:6px;border:1px solid ${loaded ? 'var(--accent)' : 'var(--border)'};
           background:${loaded ? 'rgba(78,205,196,0.08)' : 'var(--bg-darkest)'};
           color:${loaded ? 'var(--accent)' : 'var(--text-secondary)'};font-size:10px;font-weight:500;
           font-family:inherit;cursor:${loaded ? 'default' : 'pointer'};transition:all 0.2s;
-          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;opacity:${loaded ? '0.7' : '1'}">${loaded ? '&#10003; ' : ''}${s.name}</button>`;
-      }).join('');
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;opacity:${loaded ? '0.7' : '1'}`;
+        btn.innerHTML = `${loaded ? '&#10003; ' : ''}${s.name}`;
+        if (!loaded) {
+          btn.onclick = () => useSampleVoiceFromSettings(s.path, s.name, s.transcript || '');
+        }
+        row.appendChild(btn);
+        row.appendChild(createSamplePreviewButton(s, true));
+        list.appendChild(row);
+      });
     }
 
-    async function useSampleVoiceFromSettings(path, name) {
-      await useSampleVoice(path, name);
+    async function useSampleVoiceFromSettings(path, name, transcript = '') {
+      await useSampleVoice(path, name, transcript);
       loadSettingsSampleList(); // refresh to show checkmark
     }
 
@@ -3198,8 +3465,8 @@
       if (!_sampleVoices.length) { toast('No sample voices found', 'error'); return; }
       const btn = $('#load-all-samples-btn');
       const status = $('#load-samples-status');
-      const existingFiles = new Set(STATE.voiceProfiles.filter(p => p.source === 'sample').map(p => p.original_filename?.toLowerCase()));
-      const toLoad = _sampleVoices.filter(s => !existingFiles.has(s.file.toLowerCase()));
+      const loadedSampleKeys = getLoadedSampleKeys();
+      const toLoad = _sampleVoices.filter(s => !isSampleVoiceLoaded(s, loadedSampleKeys));
 
       if (!toLoad.length) { toast('All sample voices already loaded'); return; }
 
@@ -3209,17 +3476,24 @@
       status.textContent = '';
 
       let loaded = 0;
+      let refreshedExisting = false;
       for (const s of toLoad) {
         try {
           const res = await fetch('/api/voices/from-sample', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: s.path, name: s.name, transcript: '' }),
+            body: JSON.stringify({ path: s.path, name: s.name, transcript: s.transcript || '' }),
           });
           if (res.ok) {
             const profile = await res.json();
             STATE.voiceProfiles.unshift(profile);
             loaded++;
+          } else if (res.status === 409) {
+            const data = await res.json().catch(() => ({}));
+            if (data.profile && !STATE.voiceProfiles.some(p => p.id === data.profile.id)) {
+              STATE.voiceProfiles.unshift(data.profile);
+              refreshedExisting = true;
+            }
           }
         } catch {}
         btn.textContent = `Loading ${loaded}/${toLoad.length}...`;
@@ -3230,13 +3504,15 @@
       status.textContent = `${loaded} voice profiles created`;
       setTimeout(() => { status.style.display = 'none'; }, 3000);
 
-      if (loaded > 0) {
+      if (loaded > 0 || refreshedExisting) {
         if (!STATE.selectedVoice) {
           STATE.selectedVoice = STATE.voiceProfiles[0].id;
           localStorage.setItem('tada-voice', STATE.selectedVoice);
         }
         renderVoiceProfiles();
-        loadSettingsSampleList();
+        refreshSampleVoiceViews();
+      }
+      if (loaded > 0) {
         toast(`${loaded} sample voices loaded`);
       }
     }
